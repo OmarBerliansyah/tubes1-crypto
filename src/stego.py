@@ -98,7 +98,18 @@ class VideoSteganography:
         if isinstance(payload_data, str):
             payload_data = payload_data.encode('utf-8')
         
+        capacity = self.calculate_capacity(video_path)
+        payload_bytes = len(payload_data)
+        
+        estimated_total_bytes = 100 + payload_bytes
+        if estimated_total_bytes > capacity['payload_capacity_bytes']:
+            raise StegoError(
+                f"Payload too large. Needed: {payload_bytes:,} bytes, "
+                f"Available: {capacity['payload_capacity_bytes']:,} bytes"
+            )
+        
         payload_bits = bytes_to_bits(payload_data)
+        
         
         if use_encryption and encryption_key:
             if len(encryption_key) < 16:
@@ -110,23 +121,17 @@ class VideoSteganography:
             len(payload_bits), extension, use_encryption, use_random, self.lsb_mode
         )
         
-        capacity = self.calculate_capacity(video_path)
-        total_payload_needed = len(payload_bits)
-        
-        if total_payload_needed > capacity['payload_capacity_bits']:
-            raise StegoError(
-                f"Payload too large. Needed: {total_payload_needed // 8} bytes, "
-                f"Available: {capacity['payload_capacity_bytes']} bytes"
-            )
-        
         temp_dir = tempfile.mkdtemp()
         temp_video = os.path.join(temp_dir, 'temp_stego.avi')
         temp_audio = os.path.join(temp_dir, 'temp_audio.aac')
         
         try:
             video_has_audio = has_audio(video_path)
+            audio_extracted = False
             if video_has_audio:
-                extract_audio(video_path, temp_audio)
+                audio_extracted = extract_audio(video_path, temp_audio)
+                if not audio_extracted:
+                    print("Warning: Audio extraction failed, output will have no audio")
             
             with VideoProcessor(video_path) as reader:
                 w, h, fps, total_frames = reader.get_info()
@@ -145,7 +150,9 @@ class VideoSteganography:
                             break
                         
                         if frame_idx == self.HEADER_FRAME:
-                            header_coords = header_pixel_gen.get_indices_for_frame(0, len(header_bits) // 3 + 1)
+                            bits_per_pixel_header = 3
+                            pixels_needed = (len(header_bits) + bits_per_pixel_header - 1) // bits_per_pixel_header
+                            header_coords = header_pixel_gen.get_indices_for_frame(0, pixels_needed)
                             old_mode = self.lsb_mode
                             old_bpp = self.bits_per_pixel
                             self.lsb_mode = '111'
@@ -172,9 +179,10 @@ class VideoSteganography:
                             status = "Embedding" if payload_bit_idx < len(payload_bits) else "Finalizing"
                             progress_callback(frame_idx + 1, total_frames, status)
             
-            if video_has_audio and os.path.exists(temp_audio):
+            if audio_extracted and os.path.exists(temp_audio):
                 success = mux_audio_video(temp_video, temp_audio, output_path)
                 if not success:
+                    print("Muxing failed, copying video without audio")
                     shutil.copy(temp_video, output_path)
             else:
                 shutil.copy(temp_video, output_path)
@@ -217,8 +225,11 @@ class VideoSteganography:
             
             header_pixel_gen = FramePixelGenerator(w, h, stego_key=None, use_random=False)
             
-            max_header_bits = 512
-            header_coords = header_pixel_gen.get_indices_for_frame(0, max_header_bits // 3 + 1)
+            max_header_bits = 600
+            bits_per_pixel_header = 3
+            pixels_needed = (max_header_bits + bits_per_pixel_header - 1) // bits_per_pixel_header
+            
+            header_coords = header_pixel_gen.get_indices_for_frame(0, pixels_needed)
             
             old_mode = self.lsb_mode
             old_bpp = self.bits_per_pixel
@@ -310,19 +321,28 @@ class VideoSteganography:
         if not result['success']:
             return result
         
-        if output_filename:
-            filename = output_filename
+        if output_dir and os.path.splitext(output_dir)[1]:
+            output_path = output_dir
+            output_base_dir = os.path.dirname(output_path) or '.'
+            if not os.path.exists(output_base_dir):
+                os.makedirs(output_base_dir, exist_ok=True)
         else:
-            extension = result['extension'] if result['extension'] else '.bin'
-            filename = f"extracted{extension}"
-        
-        output_path = os.path.join(output_dir, filename)
-        
-        counter = 1
-        base, ext = os.path.splitext(output_path)
-        while os.path.exists(output_path):
-            output_path = f"{base}_{counter}{ext}"
-            counter += 1
+            if output_filename:
+                filename = output_filename
+            else:
+                extension = result['extension'] if result['extension'] else '.bin'
+                filename = f"extracted{extension}"
+            
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            
+            output_path = os.path.join(output_dir, filename)
+            
+            counter = 1
+            base, ext = os.path.splitext(output_path)
+            while os.path.exists(output_path):
+                output_path = f"{base}_{counter}{ext}"
+                counter += 1
         
         with open(output_path, 'wb') as f:
             f.write(result['data'])

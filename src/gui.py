@@ -48,14 +48,17 @@ class StegoGUI:
         embed_frame = ttk.Frame(notebook, padding=10)
         extract_frame = ttk.Frame(notebook, padding=10)
         analysis_frame = ttk.Frame(notebook, padding=10)
+        verify_frame = ttk.Frame(notebook, padding=10)
         
         notebook.add(embed_frame, text="Embed")
         notebook.add(extract_frame, text="Extract")
         notebook.add(analysis_frame, text="Analysis")
+        notebook.add(verify_frame, text="Verify")
         
         self._create_embed_tab(embed_frame)
         self._create_extract_tab(extract_frame)
         self._create_analysis_tab(analysis_frame)
+        self._create_verify_tab(verify_frame)
         
         self.status_frame = ttk.Frame(self.root, padding=5)
         self.status_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -136,7 +139,7 @@ class StegoGUI:
         btn_frame.pack(fill=tk.X, pady=10)
         self.embed_btn = ttk.Button(btn_frame, text="Embed", command=self._start_embed)
         self.embed_btn.pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Calculate Capacity", command=self._show_capacity).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Test Overflow", command=self._test_capacity_overflow).pack(side=tk.LEFT, padx=5)
     
     def _create_extract_tab(self, parent):
         stego_frame = ttk.LabelFrame(parent, text="Stego Video", padding=10)
@@ -207,6 +210,34 @@ class StegoGUI:
         self.analysis_result = scrolledtext.ScrolledText(result_frame, height=15, width=60)
         self.analysis_result.pack(fill=tk.BOTH, expand=True)
     
+    def _create_verify_tab(self, parent):        
+        files_frame = ttk.LabelFrame(parent, text="File Comparison", padding=10)
+        files_frame.pack(fill=tk.X, pady=5)
+        
+        orig_row = ttk.Frame(files_frame)
+        orig_row.pack(fill=tk.X, pady=5)
+        ttk.Label(orig_row, text="Original File (embedded):").pack(side=tk.LEFT)
+        self.verify_orig_file = ttk.Entry(orig_row, width=50)
+        self.verify_orig_file.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        ttk.Button(orig_row, text="Browse", command=lambda: self._browse_for_hash_file(self.verify_orig_file)).pack(side=tk.LEFT)
+        
+        ext_row = ttk.Frame(files_frame)
+        ext_row.pack(fill=tk.X, pady=5)
+        ttk.Label(ext_row, text="Extracted File:").pack(side=tk.LEFT)
+        self.verify_ext_file = ttk.Entry(ext_row, width=50)
+        self.verify_ext_file.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        ttk.Button(ext_row, text="Browse", command=lambda: self._browse_for_hash_file(self.verify_ext_file)).pack(side=tk.LEFT)
+        
+        btn_frame = ttk.Frame(parent)
+        btn_frame.pack(fill=tk.X, pady=10)
+        ttk.Button(btn_frame, text="Verify Integrity (SHA-256)", command=self._verify_file_integrity).pack(side=tk.LEFT, padx=5)
+        
+        result_frame = ttk.LabelFrame(parent, text="Verification Results", padding=10)
+        result_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.verify_result = scrolledtext.ScrolledText(result_frame, height=15, width=60)
+        self.verify_result.pack(fill=tk.BOTH, expand=True)
+    
     def _toggle_payload_type(self):
         if self.use_text_message.get():
             self.file_frame.pack_forget()
@@ -239,6 +270,12 @@ class StegoGUI:
         if path:
             self.video_path.set(path)
             self._update_video_info()
+            base_dir = os.path.dirname(path)
+            filename = os.path.basename(path)
+            name, ext = os.path.splitext(filename)
+            output_filename = f"{name}_stego{ext}"
+            output_path = os.path.join(base_dir, output_filename)
+            self.output_path.set(output_path)
     
     def _browse_payload(self):
         path = filedialog.askopenfilename(title="Select Payload File")
@@ -263,6 +300,8 @@ class StegoGUI:
         )
         if path:
             self.stego_video_path.set(path)
+            output_dir = os.path.dirname(path)
+            self.extract_output_dir.set(output_dir)
     
     def _browse_extract_output(self):
         path = filedialog.askdirectory(title="Select Output Directory")
@@ -278,6 +317,12 @@ class StegoGUI:
             entry.delete(0, tk.END)
             entry.insert(0, path)
     
+    def _browse_for_hash_file(self, entry):
+        path = filedialog.askopenfilename(title="Select File for Hash Verification")
+        if path:
+            entry.delete(0, tk.END)
+            entry.insert(0, path)
+    
     def _update_video_info(self):
         path = self.video_path.get()
         if not path or not os.path.exists(path):
@@ -286,7 +331,14 @@ class StegoGUI:
         try:
             with VideoProcessor(path) as vp:
                 w, h, fps, total = vp.get_info()
-                info = f"Resolution: {w}x{h} | FPS: {fps:.2f} | Frames: {total}"
+                file_size = os.path.getsize(path)
+                size_mb = file_size / (1024 * 1024)
+                
+                stego = VideoSteganography(self.lsb_mode.get())
+                cap = stego.calculate_capacity(path)
+                capacity_mb = cap['payload_capacity_bytes'] / (1024 * 1024)
+                
+                info = f"Resolution: {w}x{h} | FPS: {fps:.2f} | Frames: {total} | Size: {size_mb:.2f} MB\nCapacity: {cap['payload_capacity_bytes']:,} bytes ({capacity_mb:.2f} MB)"
                 self.video_info_label.config(text=info)
         except Exception as e:
             self.video_info_label.config(text=f"Error: {e}")
@@ -302,22 +354,51 @@ class StegoGUI:
             cap = stego.calculate_capacity(path)
             
             msg = f"""Video Capacity Analysis
-========================
-Resolution: {cap['width']}x{cap['height']}
-Total Frames: {cap['total_frames']}
-FPS: {cap['fps']:.2f}
+                ========================
+                Resolution: {cap['width']}x{cap['height']}
+                Total Frames: {cap['total_frames']}
+                FPS: {cap['fps']:.2f}
 
-LSB Mode: {self.lsb_mode.get()} ({cap['bits_per_pixel']} bits/pixel)
+                LSB Mode: {self.lsb_mode.get()} ({cap['bits_per_pixel']} bits/pixel)
 
-Header Capacity: {cap['header_capacity_bits']:,} bits
-Payload Capacity: {cap['payload_capacity_bits']:,} bits
-                 = {cap['payload_capacity_bytes']:,} bytes
-                 = {cap['payload_capacity_bytes'] / 1024:.2f} KB
-                 = {cap['payload_capacity_bytes'] / (1024*1024):.4f} MB
-"""
+                Header Capacity: {cap['header_capacity_bits']:,} bits
+                Payload Capacity: {cap['payload_capacity_bits']:,} bits
+                                = {cap['payload_capacity_bytes']:,} bytes
+                                = {cap['payload_capacity_bytes'] / 1024:.2f} KB
+                                = {cap['payload_capacity_bytes'] / (1024*1024):.4f} MB
+                """
             messagebox.showinfo("Capacity", msg)
         except Exception as e:
             messagebox.showerror("Error", str(e))
+    
+    def _test_capacity_overflow(self):
+        path = self.video_path.get()
+        if not path or not os.path.exists(path):
+            messagebox.showwarning("Warning", "Please select a video first.")
+            return
+        
+        if not self.output_path.get():
+            messagebox.showwarning("Warning", "Please specify output path.")
+            return
+        
+        try:
+            stego = VideoSteganography(self.lsb_mode.get())
+            cap = stego.calculate_capacity(path)
+            
+            max_bytes = cap['payload_capacity_bytes']
+            test_payload_size = max_bytes + 1
+            
+            estimated_total_bytes = 100 + test_payload_size
+            if estimated_total_bytes > cap['payload_capacity_bytes']:
+                simple_msg = f"Rejected, Max capacity is {max_bytes:,} bytes (input {test_payload_size:,} bytes)"
+                self.status_label.config(text=f"Error: {simple_msg}")
+                messagebox.showwarning("Capacity Exceeded", simple_msg)
+                return
+            
+            self.status_label.config(text="Unexpected: Overflow was not rejected!")
+        
+        except Exception as e:
+            self.status_label.config(text=f"Error: {str(e)}")
     
     def _update_progress(self, current, total, status=""):
         self.progress['value'] = (current / total) * 100
@@ -351,6 +432,22 @@ Payload Capacity: {cap['payload_capacity_bits']:,} bits
             if not payload_path or not os.path.exists(payload_path):
                 messagebox.showwarning("Warning", "Please select a payload file.")
                 return
+            
+            try:
+                stego = VideoSteganography(self.lsb_mode.get())
+                cap = stego.calculate_capacity(video_path)
+                file_size = os.path.getsize(payload_path)
+                estimated_total_bytes = 100 + file_size
+                
+                if estimated_total_bytes > cap['payload_capacity_bytes']:
+                    simple_msg = f"File too large. Max capacity is {cap['payload_capacity_bytes']:,} bytes (file is {file_size:,} bytes)"
+                    self.status_label.config(text=f"Error: {simple_msg}")
+                    messagebox.showwarning("File Too Large", simple_msg)
+                    return
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+                return
+            
             with open(payload_path, 'rb') as f:
                 payload_data = f.read()
             extension = os.path.splitext(payload_path)[1]
@@ -382,7 +479,8 @@ Payload Capacity: {cap['payload_capacity_bits']:,} bits
                 
                 self.root.after(0, lambda: self._embed_complete(result))
             except Exception as e:
-                self.root.after(0, lambda: self._embed_error(str(e)))
+                error_msg = str(e)
+                self.root.after(0, lambda msg=error_msg: self._embed_error(msg))
         
         threading.Thread(target=embed_thread, daemon=True).start()
     
@@ -393,20 +491,35 @@ Payload Capacity: {cap['payload_capacity_bits']:,} bits
         self.status_label.config(text="Embedding complete!")
         
         msg = f"""Embedding Successful!
-========================
-Output: {result['output_path']}
-Payload Size: {result['payload_size_bytes']:,} bytes
-Frames Used: {result['frames_used']}/{result['total_frames']}
-Audio Preserved: {'Yes' if result['has_audio'] else 'No'}
-"""
+            ========================
+            Output: {result['output_path']}
+            Payload Size: {result['payload_size_bytes']:,} bytes
+            Frames Used: {result['frames_used']}/{result['total_frames']}
+            Audio Preserved: {'Yes' if result['has_audio'] else 'No'}
+            """
         messagebox.showinfo("Success", msg)
     
     def _embed_error(self, error):
         self.is_processing = False
         self.embed_btn.config(state=tk.NORMAL)
         self.progress['value'] = 0
-        self.status_label.config(text=f"Error: {error}")
-        messagebox.showerror("Error", error)
+        
+        if "Payload too large" in error or "too large" in error.lower():
+            try:
+                if "Needed:" in error and "Available:" in error:
+                    needed_str = error.split("Needed: ")[1].split(" bytes")[0].strip()
+                    available_str = error.split("Available: ")[1].split(" bytes")[0].strip()
+                    needed = int(needed_str.replace(",", ""))
+                    available = int(available_str.replace(",", ""))
+                    simple_msg = f"Rejected, Max capacity is {available:,} bytes (input {needed:,} bytes)"
+                else:
+                    simple_msg = error
+            except Exception as parse_err:
+                simple_msg = error
+        else:
+            simple_msg = error
+        
+        self.status_label.config(text=f"Error: {simple_msg}")
     
     def _start_extract(self):
         if self.is_processing:
@@ -439,7 +552,8 @@ Audio Preserved: {'Yes' if result['has_audio'] else 'No'}
                 
                 self.root.after(0, lambda: self._extract_complete(result))
             except Exception as e:
-                self.root.after(0, lambda: self._extract_error(str(e)))
+                error_msg = str(e)
+                self.root.after(0, lambda msg=error_msg: self._extract_error(msg))
         
         threading.Thread(target=extract_thread, daemon=True).start()
     
@@ -452,14 +566,14 @@ Audio Preserved: {'Yes' if result['has_audio'] else 'No'}
         self.result_text.delete("1.0", tk.END)
         
         info = f"""Extraction Successful!
-========================
-Output File: {result.get('output_path', 'N/A')}
-Extension: {result['extension']}
-Size: {result['size_bytes']:,} bytes
-Was Encrypted: {result['was_encrypted']}
-Was Random: {result['was_random']}
-LSB Mode: {result['lsb_mode']}
-"""
+            ========================
+            Output File: {result.get('output_path', 'N/A')}
+            Extension: {result['extension']}
+            Size: {result['size_bytes']:,} bytes
+            Was Encrypted: {result['was_encrypted']}
+            Was Random: {result['was_random']}
+            LSB Mode: {result['lsb_mode']}
+            """
         
         if result['extension'] == '.txt' or not result['extension']:
             try:
@@ -499,20 +613,20 @@ LSB Mode: {result['lsb_mode']}
                 mse, psnr = metrics_streaming(orig_path, stego_path, self._update_progress)
                 
                 result = f"""MSE/PSNR Analysis
-========================
-Original: {orig_path}
-Stego: {stego_path}
+                    ========================
+                    Original: {orig_path}
+                    Stego: {stego_path}
 
-Mean Squared Error (MSE): {mse:.6f}
-Peak Signal-to-Noise Ratio (PSNR): {psnr:.2f} dB
+                    Mean Squared Error (MSE): {mse:.6f}
+                    Peak Signal-to-Noise Ratio (PSNR): {psnr:.2f} dB
 
-Interpretation:
-- MSE closer to 0 = less distortion
-- PSNR > 40 dB = excellent quality (imperceptible)
-- PSNR 30-40 dB = good quality
-- PSNR 20-30 dB = acceptable quality
-- PSNR < 20 dB = poor quality (visible artifacts)
-"""
+                    Interpretation:
+                    - MSE closer to 0 = less distortion
+                    - PSNR > 40 dB = excellent quality (imperceptible)
+                    - PSNR 30-40 dB = good quality
+                    - PSNR 20-30 dB = acceptable quality
+                    - PSNR < 20 dB = poor quality (visible artifacts)
+                    """
                 
                 with VideoProcessor(orig_path) as vp_orig, VideoProcessor(stego_path) as vp_stego:
                     orig_frame = vp_orig.read_frame(0)
@@ -521,14 +635,14 @@ Interpretation:
                     if orig_frame is not None and stego_frame is not None:
                         hist_corr = compare_histograms(orig_frame, stego_frame)
                         result += f"""
-Histogram Correlation (Frame 0):
-- Red Channel: {hist_corr['red']:.6f}
-- Green Channel: {hist_corr['green']:.6f}
-- Blue Channel: {hist_corr['blue']:.6f}
-- Average: {hist_corr['average']:.6f}
+                            Histogram Correlation (Frame 0):
+                            - Red Channel: {hist_corr['red']:.6f}
+                            - Green Channel: {hist_corr['green']:.6f}
+                            - Blue Channel: {hist_corr['blue']:.6f}
+                            - Average: {hist_corr['average']:.6f}
 
-(Correlation 1.0 = identical histograms)
-"""
+                            (Correlation 1.0 = identical histograms)
+                            """
                 
                 self.root.after(0, lambda: self._show_analysis_result(result))
             except Exception as e:
@@ -578,6 +692,64 @@ Histogram Correlation (Frame 0):
             messagebox.showerror("Error", "matplotlib is required for histogram visualization.\nInstall with: pip install matplotlib")
         except Exception as e:
             messagebox.showerror("Error", str(e))
+    
+    def _verify_file_integrity(self):
+        import hashlib
+        
+        orig_file = self.verify_orig_file.get()
+        ext_file = self.verify_ext_file.get()
+        
+        if not orig_file or not os.path.exists(orig_file):
+            messagebox.showwarning("Warning", "Please select original file.")
+            return
+        
+        if not ext_file or not os.path.exists(ext_file):
+            messagebox.showwarning("Warning", "Please select extracted file.")
+            return
+        
+        try:
+            sha256_orig = hashlib.sha256()
+            with open(orig_file, 'rb') as f:
+                for chunk in iter(lambda: f.read(4096), b''):
+                    sha256_orig.update(chunk)
+            orig_hash = sha256_orig.hexdigest()
+            
+            sha256_ext = hashlib.sha256()
+            with open(ext_file, 'rb') as f:
+                for chunk in iter(lambda: f.read(4096), b''):
+                    sha256_ext.update(chunk)
+            ext_hash = sha256_ext.hexdigest()
+            
+            orig_size = os.path.getsize(orig_file)
+            ext_size = os.path.getsize(ext_file)
+            
+            result = f"""File Integrity Verification (SHA-256)
+                ========================================
+
+                Original File (embedded):
+                Path: {orig_file}
+                Size: {orig_size:,} bytes
+                SHA-256: {orig_hash}
+
+                Extracted File:
+                Path: {ext_file}
+                Size: {ext_size:,} bytes
+                SHA-256: {ext_hash}
+
+                Verification Result:
+                """
+            
+            if orig_hash == ext_hash:
+                status = "VERIFIED"
+            else:
+                status = "INTEGRITY FAILED"
+            
+            self.verify_result.delete("1.0", tk.END)
+            self.verify_result.insert("1.0", result)
+            self.status_label.config(text=status)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Hash verification failed: {str(e)}")
 
 
 def main():

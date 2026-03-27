@@ -55,21 +55,86 @@ class VideoProcessor:
 
 
 class VideoWriter:
-    def __init__(self, path, w, h, fps):
+    def __init__(self, path, w, h, fps, use_ffmpeg=True):
         self.path = path
         self.w = w
         self.h = h
         self.fps = fps
-        fourcc = cv2.VideoWriter_fourcc(*'FFV1')
-        self.out = cv2.VideoWriter(path, fourcc, fps, (w, h))
+        self.use_ffmpeg = use_ffmpeg and check_ffmpeg()
+        self.process = None
+        self.out = None
+        self.frame_count = 0
+        
+        if self.use_ffmpeg:
+            self._init_ffmpeg()
+        else:
+            self._init_opencv()
+    
+    def _init_ffmpeg(self):
+        """Initialize ffmpeg pipe with FFV1 lossless codec for steganography."""
+        try:
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-hide_banner',
+                '-loglevel', 'error',
+                '-f', 'rawvideo',
+                '-vcodec', 'rawvideo',
+                '-s', f'{self.w}x{self.h}',
+                '-pix_fmt', 'bgr24',
+                '-r', str(self.fps),
+                '-i', '-',
+                '-c:v', 'ffv1', 
+                '-level', '3',   
+                '-slices', '4',  
+                '-f', 'avi',
+                self.path
+            ]
+            
+            self.process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+        except Exception as e:
+            print(f"FFmpeg initialization failed: {e}. Falling back to OpenCV.")
+            self.use_ffmpeg = False
+            self._init_opencv()
+    
+    def _init_opencv(self):
+        """Fallback to OpenCV VideoWriter with MJPEG."""
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+        self.out = cv2.VideoWriter(self.path, fourcc, self.fps, (self.w, self.h))
         if not self.out.isOpened():
-            raise ValueError(f"Cannot create video writer for: {path}")
+            raise ValueError(f"Cannot create video writer for: {self.path}")
     
     def write_frame(self, frame):
-        self.out.write(frame)
+        """Write a frame to the video."""
+        if self.use_ffmpeg and self.process:
+            try:
+                self.process.stdin.write(frame.tobytes())
+                self.frame_count += 1
+            except Exception as e:
+                print(f"Error writing frame via ffmpeg: {e}")
+        elif self.out:
+            self.out.write(frame)
+            self.frame_count += 1
     
     def release(self):
-        if self.out:
+        """Close the video writer."""
+        if self.use_ffmpeg and self.process:
+            try:
+                self.process.stdin.close()
+                self.process.wait(timeout=30)
+            except Exception as e:
+                print(f"Error closing ffmpeg process: {e}")
+                try:
+                    self.process.terminate()
+                except:
+                    pass
+        elif self.out:
             self.out.release()
     
     def __enter__(self):
@@ -99,8 +164,9 @@ def extract_audio(video_path, audio_path):
     
     try:
         cmd = [
-            'ffmpeg', '-y', '-i', video_path,
-            '-vn', '-acodec', 'copy', audio_path
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+            '-i', video_path,
+            '-vn', '-acodec', 'aac', audio_path
         ]
         result = subprocess.run(
             cmd,
@@ -108,8 +174,12 @@ def extract_audio(video_path, audio_path):
             stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
-        return result.returncode == 0 and os.path.exists(audio_path)
-    except Exception:
+        success = result.returncode == 0 and os.path.exists(audio_path)
+        if not success and result.stderr:
+            print(f"Audio extraction stderr: {result.stderr.decode('utf-8', errors='ignore')}")
+        return success
+    except Exception as e:
+        print(f"Exception in extract_audio: {e}")
         return False
 
 
@@ -140,7 +210,7 @@ def mux_audio_video(video_path, audio_path, output_path):
     
     try:
         cmd = [
-            'ffmpeg', '-y',
+            'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
             '-i', video_path,
             '-i', audio_path,
             '-c:v', 'copy',
@@ -155,7 +225,14 @@ def mux_audio_video(video_path, audio_path, output_path):
             stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
+        else:
+            print(f"Mux audio/video failed: {result.stderr.decode('utf-8', errors='ignore')}")
+            return False
+    except Exception as e:
+        print(f"Exception in mux_audio_video: {e}")
+        return False
     except Exception:
         return False
 
@@ -218,9 +295,54 @@ def load_video(path):
 
 
 def save_video(frames, w, h, fps, path):
-    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'FFV1'), fps, (w, h))
-    for f in frames: out.write(f)
-    out.release()
+    """Save video using ffmpeg with FFV1 lossless codec for steganography."""
+    if check_ffmpeg():
+        try:
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-hide_banner',
+                '-loglevel', 'error',
+                '-f', 'rawvideo',
+                '-vcodec', 'rawvideo',
+                '-s', f'{w}x{h}',
+                '-pix_fmt', 'bgr24',
+                '-r', str(fps),
+                '-i', '-',
+                '-c:v', 'ffv1',
+                '-level', '3',
+                '-slices', '4',
+                '-f', 'avi',
+                path
+            ]
+            
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            
+            for frame in frames:
+                process.stdin.write(frame.tobytes())
+            
+            process.stdin.close()
+            process.wait()
+            
+            if process.returncode != 0:
+                print(f"FFmpeg save warning: return code {process.returncode}")
+        except Exception as e:
+            print(f"FFmpeg save failed: {e}. Falling back to OpenCV.")
+            out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'MJPG'), fps, (w, h))
+            for f in frames:
+                out.write(f)
+            out.release()
+    else:
+        out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'MJPG'), fps, (w, h))
+        for f in frames:
+            out.write(f)
+        out.release()
 
 
 def get_video_capacity(path, lsb_mode='332'):
