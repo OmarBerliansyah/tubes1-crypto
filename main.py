@@ -1,112 +1,268 @@
-from video import load_video, save_video
-from function import *
-from seed import coordinates, random_seed
-from metric import metrics
-from a51 import A51
+#!/usr/bin/env python3
+
+import sys
+import os
+import argparse
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+
+def run_gui():
+    from gui import main as gui_main
+    gui_main()
+
+
+def run_cli():
+    from stego import VideoSteganography, StegoError
+    from metric import metrics_streaming
+    
+    print("=" * 60)
+    print("Video Steganography - A5/1 & LSB")
+    print("II4021 - Kriptografi, ITB")
+    print("=" * 60)
+    
+    while True:
+        print("\nMenu:")
+        print("  1. Embed (hide message/file in video)")
+        print("  2. Extract (retrieve hidden data from video)")
+        print("  3. Calculate Capacity")
+        print("  4. Compare Videos (MSE/PSNR)")
+        print("  0. Exit")
+        
+        choice = input("\nPilih menu [0-4]: ").strip()
+        
+        if choice == '0':
+            print("Goodbye!")
+            break
+        elif choice == '1':
+            cli_embed()
+        elif choice == '2':
+            cli_extract()
+        elif choice == '3':
+            cli_capacity()
+        elif choice == '4':
+            cli_metrics()
+        else:
+            print("Invalid choice. Please try again.")
+
+
+def cli_embed():
+    """CLI embed function."""
+    from stego import VideoSteganography, StegoError
+    
+    print("\n--- EMBED MODE ---")
+    
+    video_path = input("Cover video path: ").strip().strip('"')
+    if not os.path.exists(video_path):
+        print(f"Error: Video not found: {video_path}")
+        return
+    
+    print("\nLSB Mode:")
+    print("  1. 1-1-1 (3 bits/pixel) - Most subtle")
+    print("  2. 2-2-2 (6 bits/pixel) - Balanced")
+    print("  3. 3-3-2 (8 bits/pixel) - Maximum capacity")
+    lsb_choice = input("Choose LSB mode [1-3, default=3]: ").strip() or '3'
+    lsb_map = {'1': '111', '2': '222', '3': '332'}
+    lsb_mode = lsb_map.get(lsb_choice, '332')
+    
+    stego = VideoSteganography(lsb_mode)
+    cap = stego.calculate_capacity(video_path)
+    print(f"\nCapacity: {cap['payload_capacity_bytes']:,} bytes ({cap['payload_capacity_bytes']/1024:.2f} KB)")
+    
+    print("\nPayload type:")
+    print("  1. Text message")
+    print("  2. File")
+    payload_type = input("Choose [1-2]: ").strip()
+    
+    if payload_type == '1':
+        print("Enter message (press Enter twice to finish):")
+        lines = []
+        while True:
+            line = input()
+            if line == '':
+                break
+            lines.append(line)
+        message = '\n'.join(lines)
+        payload_data = message.encode('utf-8')
+        extension = '.txt'
+    else:
+        file_path = input("File path: ").strip().strip('"')
+        if not os.path.exists(file_path):
+            print(f"Error: File not found: {file_path}")
+            return
+        with open(file_path, 'rb') as f:
+            payload_data = f.read()
+        extension = os.path.splitext(file_path)[1]
+        print(f"File size: {len(payload_data):,} bytes")
+    
+    if len(payload_data) * 8 > cap['payload_capacity_bits']:
+        print(f"Error: Payload too large! Max: {cap['payload_capacity_bytes']:,} bytes")
+        return
+    
+    use_enc = input("\nEnable A5/1 encryption? [y/n]: ").lower() == 'y'
+    enc_key = None
+    if use_enc:
+        enc_key = input("Encryption key (hex or password): ").strip()
+    
+    use_random = input("Enable random pixel spreading? [y/n]: ").lower() == 'y'
+    stego_key = None
+    if use_random:
+        stego_key = input("Stego key: ").strip()
+    
+    output_path = input("\nOutput video path [default: stego_output.avi]: ").strip() or 'stego_output.avi'
+    
+    print("\nEmbedding...")
+    
+    def progress(current, total, status):
+        pct = (current / total) * 100
+        print(f"\r{status}: {current}/{total} ({pct:.1f}%)", end='', flush=True)
+    
+    try:
+        result = stego.embed(
+            video_path, output_path, payload_data, extension,
+            use_enc, enc_key, use_random, stego_key, progress
+        )
+        print(f"\n\nSuccess!")
+        print(f"Output: {result['output_path']}")
+        print(f"Payload: {result['payload_size_bytes']:,} bytes")
+        print(f"Frames used: {result['frames_used']}/{result['total_frames']}")
+        print(f"Audio preserved: {result['has_audio']}")
+    except StegoError as e:
+        print(f"\nError: {e}")
+    except Exception as e:
+        print(f"\nUnexpected error: {e}")
+
+
+def cli_extract():
+    """CLI extract function."""
+    from stego import VideoSteganography, StegoError
+    
+    print("\n--- EXTRACT MODE ---")
+    
+    video_path = input("Stego video path: ").strip().strip('"')
+    if not os.path.exists(video_path):
+        print(f"Error: Video not found: {video_path}")
+        return
+    
+    enc_key = input("Encryption key (leave empty if not encrypted): ").strip() or None
+    stego_key = input("Stego key (leave empty if sequential): ").strip() or None
+    
+    output_dir = input("Output directory [default: current]: ").strip() or '.'
+    
+    print("\nExtracting...")
+    
+    def progress(current, total, status):
+        pct = (current / total) * 100
+        print(f"\r{status}: {current}/{total} ({pct:.1f}%)", end='', flush=True)
+    
+    try:
+        stego = VideoSteganography()
+        result = stego.extract_to_file(video_path, output_dir, enc_key, stego_key, progress_callback=progress)
+        
+        print(f"\n\nSuccess!")
+        print(f"Output: {result['output_path']}")
+        print(f"Size: {result['size_bytes']:,} bytes")
+        print(f"Extension: {result['extension']}")
+        print(f"Was encrypted: {result['was_encrypted']}")
+        print(f"Was random: {result['was_random']}")
+        print(f"LSB mode: {result['lsb_mode']}")
+        
+        if result['extension'] == '.txt' or not result['extension']:
+            try:
+                text = result['data'].decode('utf-8')
+                print(f"\n--- Message ---\n{text}")
+            except:
+                pass
+                
+    except StegoError as e:
+        print(f"\nError: {e}")
+    except Exception as e:
+        print(f"\nUnexpected error: {e}")
+
+
+def cli_capacity():
+    """CLI capacity calculation."""
+    from stego import VideoSteganography
+    
+    print("\n--- CAPACITY CALCULATOR ---")
+    
+    video_path = input("Video path: ").strip().strip('"')
+    if not os.path.exists(video_path):
+        print(f"Error: Video not found: {video_path}")
+        return
+    
+    print("\nCapacity by LSB mode:")
+    for mode, name in [('111', '1-1-1'), ('222', '2-2-2'), ('332', '3-3-2')]:
+        stego = VideoSteganography(mode)
+        cap = stego.calculate_capacity(video_path)
+        print(f"  {name}: {cap['payload_capacity_bytes']:,} bytes ({cap['payload_capacity_bytes']/1024:.2f} KB)")
+
+
+def cli_metrics():
+    """CLI metrics calculation."""
+    from metric import metrics_streaming
+    
+    print("\n--- VIDEO COMPARISON ---")
+    
+    orig_path = input("Original video path: ").strip().strip('"')
+    if not os.path.exists(orig_path):
+        print(f"Error: Video not found: {orig_path}")
+        return
+    
+    stego_path = input("Stego video path: ").strip().strip('"')
+    if not os.path.exists(stego_path):
+        print(f"Error: Video not found: {stego_path}")
+        return
+    
+    print("\nCalculating metrics...")
+    
+    def progress(current, total):
+        pct = (current / total) * 100
+        print(f"\rProgress: {current}/{total} ({pct:.1f}%)", end='', flush=True)
+    
+    mse, psnr = metrics_streaming(orig_path, stego_path, progress)
+    
+    print(f"\n\nResults:")
+    print(f"  MSE: {mse:.6f}")
+    print(f"  PSNR: {psnr:.2f} dB")
+    print(f"\nInterpretation:")
+    if psnr == float('inf'):
+        print("  Videos are identical!")
+    elif psnr > 40:
+        print("  Excellent quality - changes are imperceptible")
+    elif psnr > 30:
+        print("  Good quality - minimal visible artifacts")
+    elif psnr > 20:
+        print("  Acceptable quality - some visible artifacts")
+    else:
+        print("  Poor quality - significant visible artifacts")
+
 
 def main():
-    menu = input("Menu\n 1: Embed\n 2: Extract\n ")
-    video_path = input("path: ")
-    frames, w, h, fps = load_video(video_path)
-    h, w, _ = frames[0].shape
-    total_pixels = len(frames) * w * h
+    parser = argparse.ArgumentParser(
+        description="Video Steganography with A5/1 Encryption",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+        python main.py              # Launch GUI
+        python main.py --cli        # Use CLI mode
+        python main.py --embed      # Quick embed
+        python main.py --extract    # Quick extract"""
+    )
+    parser.add_argument('--cli', action='store_true', help='Run in CLI mode')
+    parser.add_argument('--embed', action='store_true', help='Quick embed mode')
+    parser.add_argument('--extract', action='store_true', help='Quick extract mode')
+    
+    args = parser.parse_args()
+    
+    if args.cli:
+        run_cli()
+    elif args.embed:
+        cli_embed()
+    elif args.extract:
+        cli_extract()
+    else:
+        run_gui()
 
-    if menu == '1':
-        message = input("pesan: ")
-        use_enc = input("enkripsi (y/n): ").lower() == 'y'
-        if use_enc:
-            a5_key = input("A51 key:")
-            message_bits = A51(a5_key).transform(char_to_bits(message))
-        else:
-            message_bits = char_to_bits(message)
-
-        if len(message_bits) > total_pixels * 8:
-            print("kepanjangan")
-            return
- 
-        header_bits = format(len(message_bits), '030b')
-        all_bits = [int(bit) for bit in header_bits] + message_bits
-        insert_mode = input("Penyisipan\n 1.Random\n 2.Sequential\n")
-        
-        if insert_mode == '1':
-            stego_key = input("Stego Key: ")
-            seed = random_seed(stego_key, len(all_bits), total_pixels)
-        else:
-            seed = list(range(len(all_bits)))
-        stego_frames = [f.copy() for f in frames]
-        
-        header_bits = all_bits[:30]
-        payload_bits = all_bits[30:]
-        payload_pixels = (len(payload_bits) + 7) // 8
-        
-        for i in range(4 + payload_pixels):
-            idx = seed[i]
-            f_idx, y, x = coordinates(idx, w, h)
-            pixel = stego_frames[f_idx][y, x]
-            
-            if i < 4: 
-                start = i * 8
-                end = start + 8 if i < 3 else start + 6
-                part = header_bits[start:end]
-                val = int("".join(map(str, part)), 2)
-                if i == 3:
-                    val = val << 2
-                r_b, g_b, b_b = split(val)
-                stego_frames[f_idx][y, x] = put(pixel, r_b, g_b, b_b)
-                
-            else: 
-                p_idx = i - 4
-                part = payload_bits[p_idx*8 : (p_idx+1)*8]
-                if not part:
-                    break
-                val = int("".join(map(str, part)), 2)
-                r_b, g_b, b_b = split(val)
-                stego_frames[f_idx][y, x] = put(pixel, r_b, g_b, b_b)
-
-        save_video(stego_frames, w, h, fps, 'stego_result.avi')
-        mse, psnr = metrics(frames, stego_frames)
-        print(f"MSE: {mse:.4f} \nPSNR: {psnr:.2f} dB")
-
-    elif menu == '2': 
-        insert_mode = input("Penyisipan\n 1.Random\n 2.Sequential\n")
-        if insert_mode == '1':
-            stego_key = input("Stego Key: ")
-            seed_h = random_seed(stego_key, 4, total_pixels)
-        else:
-            seed_h = list(range(4))
-
-        h_bin = ""
-        for idx in seed_h:
-            f_idx, y, x = coordinates(idx, w, h)
-            b, g, r = frames[f_idx][y, x]
-            h_bin += format(r & 7, '03b') + format(g & 7, '03b')
-            if len(h_bin) < 30: 
-                h_bin += format(b & 3, '02b')
-
-        total_msg = int(h_bin[:30], 2)
-        payload_pixels = (total_msg + 7) // 8
-
-        if insert_mode == '1':
-            seed_all = random_seed(stego_key, 4 + payload_pixels, total_pixels)
-        else:
-            seed_all = list(range(4 + payload_pixels))
-
-        extracted_bits = []
-        for i in range(4, 4 + payload_pixels):
-            idx = seed_all[i]
-            f_idx, y, x = coordinates(idx, w, h)
-            b, g, r = frames[f_idx][y, x]
-            res_byte = (r & 7) << 5 | (g & 7) << 2 | (b & 3)
-            extracted_bits.extend([int(bit) for bit in format(res_byte, '08b')])
-
-        extracted_bits = extracted_bits[:total_msg]
-        use_enc = input("enskripsi 9y/n): ").lower() == 'y'
-        if use_enc:
-            a5_key = input("A51 key ")
-            extracted_bits = A51(a5_key).transform(extracted_bits)
-
-        final_msg = "".join(chr(int("".join(map(str, extracted_bits[i:i+8])), 2)) for i in range(0, len(extracted_bits), 8))
-        print(f"\nPesan Rahasia: {final_msg}")
 
 if __name__ == "__main__":
     main()
