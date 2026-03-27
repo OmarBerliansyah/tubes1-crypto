@@ -1,3 +1,6 @@
+from function import bytes_to_bits, bits_to_bytes
+import hashlib
+
 class A51:
     REG_X_LEN = 19
     REG_Y_LEN = 22
@@ -89,17 +92,17 @@ class A51:
         for i in range(self.KEY_BITS):
             self._clock_all()
             key_bit = (self.key >> i) & 1
-            self.reg_x ^= key_bit
-            self.reg_y ^= key_bit
-            self.reg_z ^= key_bit
+            self.reg_x ^= (key_bit << (self.REG_X_LEN - 1))
+            self.reg_y ^= (key_bit << (self.REG_Y_LEN - 1))
+            self.reg_z ^= (key_bit << (self.REG_Z_LEN - 1))
     
     def _load_frame_number(self, frame_number):
         for i in range(self.FRAME_BITS):
             self._clock_all()
             fn_bit = (frame_number >> i) & 1
-            self.reg_x ^= fn_bit
-            self.reg_y ^= fn_bit
-            self.reg_z ^= fn_bit
+            self.reg_x ^= (fn_bit << (self.REG_X_LEN - 1))
+            self.reg_y ^= (fn_bit << (self.REG_Y_LEN - 1))
+            self.reg_z ^= (fn_bit << (self.REG_Z_LEN - 1))
     
     def _run_empty_clocks(self, count=100):
         for _ in range(count):
@@ -118,7 +121,6 @@ class A51:
         self._run_empty_clocks(100)
     
     def get_keystream_for_frame(self, frame_number, num_bits=228):
-        """Get keystream for a specific frame number."""
         self.setup_frame(frame_number)
         return self._generate_keystream(num_bits)
     
@@ -138,19 +140,14 @@ class A51:
         return result
     
     def encrypt(self, data):
-        """Encrypt bytes data and return encrypted bytes."""
-        from function import bytes_to_bits, bits_to_bytes
         bits = bytes_to_bits(data)
         encrypted_bits = self.transform(bits)
         return bits_to_bytes(encrypted_bits)
     
     def decrypt(self, data):
-        """Decrypt bytes data and return decrypted bytes."""
         return self.encrypt(data)
 
 
 def generate_key_from_password(password):
-    """Generate a 64-bit hex key from a password string using simple hash."""
-    import hashlib
     hash_bytes = hashlib.sha256(password.encode('utf-8')).digest()
     return hash_bytes[:8].hex().upper()

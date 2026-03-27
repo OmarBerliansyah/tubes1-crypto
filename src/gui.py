@@ -11,7 +11,8 @@ from stego import VideoSteganography, StegoError
 from video import VideoProcessor, check_ffmpeg
 from metric import (
     metrics_streaming, plot_histogram_comparison, 
-    plot_histogram_overlay, compare_histograms
+    plot_histogram_overlay, plot_multiframe_residual,
+    compare_histograms, validate_frame
 )
 
 
@@ -201,8 +202,9 @@ class StegoGUI:
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X, pady=10)
         ttk.Button(btn_frame, text="Calculate MSE/PSNR", command=self._calculate_metrics).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Show Histogram Comparison", command=self._show_histogram).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Show Histogram Overlay", command=self._show_histogram_overlay).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Histogram Comparison", command=self._show_histogram).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text="Histogram Overlay", command=self._show_histogram_overlay).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text="Multi-Frame Analysis", command=self._show_multiframe_analysis).pack(side=tk.LEFT, padx=3)
         
         result_frame = ttk.LabelFrame(parent, text="Analysis Results", padding=10)
         result_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -288,9 +290,22 @@ class StegoGUI:
         path = filedialog.asksaveasfilename(
             title="Save Stego Video As",
             defaultextension=".avi",
-            filetypes=[("AVI files", "*.avi"), ("All files", "*.*")]
+            filetypes=[("AVI files (Recommended)", "*.avi"), ("All files", "*.*")]
         )
         if path:
+            ext = os.path.splitext(path)[1].lower()
+            lossy_formats = ['.mp4', '.mkv', '.mov', '.webm', '.wmv', '.flv']
+            
+            if ext in lossy_formats:
+                warning = f"WARNING: {ext.upper()} uses lossy compression!\n\n"
+                warning += "This will DESTROY the LSB steganographic data.\n"
+                warning += "The hidden message will be unrecoverable.\n\n"
+                warning += "Use .AVI format for lossless steganography.\n\n"
+                warning += "Continue anyway?"
+                
+                if not messagebox.askyesno("Lossy Format Warning", warning, icon='warning'):
+                    return
+            
             self.output_path.set(path)
     
     def _browse_stego_video(self):
@@ -661,6 +676,39 @@ class StegoGUI:
     
     def _show_histogram_overlay(self):
         self._show_histogram_plot(plot_histogram_overlay)
+    
+    def _show_multiframe_analysis(self):
+        orig_path = self.analysis_orig.get()
+        stego_path = self.analysis_stego.get()
+        
+        if not orig_path or not os.path.exists(orig_path):
+            messagebox.showwarning("Warning", "Please select original video.")
+            return
+        
+        if not stego_path or not os.path.exists(stego_path):
+            messagebox.showwarning("Warning", "Please select stego video.")
+            return
+        
+        try:
+            import matplotlib.pyplot as plt
+            
+            self.status_label.config(text="Analyzing multiple frames...")
+            self.root.update()
+            
+            fig = plot_multiframe_residual(orig_path, stego_path, sample_count=10, start_frame=3)
+            
+            if fig is not None:
+                plt.show()
+                self.status_label.config(text="Multi-frame analysis complete!")
+            else:
+                messagebox.showerror("Error", "Could not analyze frames")
+                self.status_label.config(text="Analysis failed")
+                
+        except ImportError:
+            messagebox.showerror("Error", "matplotlib is required.\nInstall with: pip install matplotlib")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+            self.status_label.config(text=f"Error: {e}")
     
     def _show_histogram_plot(self, plot_func):
         orig_path = self.analysis_orig.get()

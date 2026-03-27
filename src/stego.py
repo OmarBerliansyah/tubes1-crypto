@@ -16,8 +16,9 @@ class StegoError(Exception):
 
 
 class VideoSteganography:
-    HEADER_FRAME = 0
-    PAYLOAD_START_FRAME = 1
+    SKIP_FRAMES = 2
+    HEADER_FRAME = 2
+    PAYLOAD_START_FRAME = 3
     
     def __init__(self, lsb_mode='332'):
         self.lsb_mode = lsb_mode
@@ -80,7 +81,7 @@ class VideoSteganography:
             pixels_per_frame = w * h
             
             header_bits = pixels_per_frame * 3
-            payload_frames = total_frames - 1
+            payload_frames = total_frames - self.PAYLOAD_START_FRAME
             payload_bits = payload_frames * pixels_per_frame * self.bits_per_pixel
             
             return {
@@ -91,7 +92,9 @@ class VideoSteganography:
                 'header_capacity_bits': header_bits,
                 'payload_capacity_bits': payload_bits,
                 'payload_capacity_bytes': payload_bits // 8,
-                'bits_per_pixel': self.bits_per_pixel
+                'bits_per_pixel': self.bits_per_pixel,
+                'header_frame': self.HEADER_FRAME,
+                'payload_start_frame': self.PAYLOAD_START_FRAME
             }
     
     def embed(self, video_path, output_path, payload_data, extension='', use_encryption=False, encryption_key=None, use_random=False, stego_key=None, progress_callback=None):
@@ -149,7 +152,10 @@ class VideoSteganography:
                         if frame is None:
                             break
                         
-                        if frame_idx == self.HEADER_FRAME:
+                        if frame_idx < self.HEADER_FRAME:
+                            pass
+                        
+                        elif frame_idx == self.HEADER_FRAME:
                             bits_per_pixel_header = 3
                             pixels_needed = (len(header_bits) + bits_per_pixel_header - 1) // bits_per_pixel_header
                             header_coords = header_pixel_gen.get_indices_for_frame(0, pixels_needed)
@@ -161,7 +167,7 @@ class VideoSteganography:
                             self.lsb_mode = old_mode
                             self.bits_per_pixel = old_bpp
                         
-                        elif payload_bit_idx < len(payload_bits):
+                        elif frame_idx >= self.PAYLOAD_START_FRAME and payload_bit_idx < len(payload_bits):
                             remaining = len(payload_bits) - payload_bit_idx
                             bits_this_frame = min(remaining, pixels_per_frame * self.bits_per_pixel)
                             
@@ -245,14 +251,15 @@ class VideoSteganography:
                 raise StegoError(f"Invalid header: {e}")
             
             pixels_per_frame = w * h
-            max_capacity_bits = (total_frames - 1) * pixels_per_frame * get_bits_per_pixel(lsb_mode)
+            max_capacity_bits = (total_frames - self.PAYLOAD_START_FRAME) * pixels_per_frame * get_bits_per_pixel(lsb_mode)
             
-            if payload_length < 0 or payload_length > max_capacity_bits:
+            if payload_length <= 0 or payload_length > max_capacity_bits:
                 self.lsb_mode = old_mode
                 self.bits_per_pixel = old_bpp
                 raise StegoError(
                     f"Video ini tidak mengandung pesan steganografi yang valid (Header Corrupt). "
-                    f"Payload length: {payload_length} bits, Max capacity: {max_capacity_bits} bits"
+                    f"Payload length: {payload_length} bits, Max capacity: {max_capacity_bits} bits. "
+                    f"Pastikan Anda mengekstrak dari file stego yang benar (bukan video asli)."
                 )
             
             self.lsb_mode = lsb_mode

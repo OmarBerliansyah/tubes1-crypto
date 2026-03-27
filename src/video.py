@@ -3,6 +3,8 @@ import os
 import subprocess
 import tempfile
 import shutil
+from function import get_bits_per_pixel
+
 
 class VideoProcessor:
     def __init__(self, path):
@@ -71,7 +73,6 @@ class VideoWriter:
             self._init_opencv()
     
     def _init_ffmpeg(self):
-        """Initialize ffmpeg pipe with FFV1 lossless codec for steganography."""
         try:
             cmd = [
                 'ffmpeg',
@@ -104,14 +105,12 @@ class VideoWriter:
             self._init_opencv()
     
     def _init_opencv(self):
-        """Fallback to OpenCV VideoWriter with MJPEG."""
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         self.out = cv2.VideoWriter(self.path, fourcc, self.fps, (self.w, self.h))
         if not self.out.isOpened():
             raise ValueError(f"Cannot create video writer for: {self.path}")
     
     def write_frame(self, frame):
-        """Write a frame to the video."""
         if self.use_ffmpeg and self.process:
             try:
                 self.process.stdin.write(frame.tobytes())
@@ -123,7 +122,6 @@ class VideoWriter:
             self.frame_count += 1
     
     def release(self):
-        """Close the video writer."""
         if self.use_ffmpeg and self.process:
             try:
                 self.process.stdin.close()
@@ -158,7 +156,6 @@ def check_ffmpeg():
 
 
 def extract_audio(video_path, audio_path):
-    """Extract audio from video using ffmpeg."""
     if not check_ffmpeg():
         return False
     
@@ -295,7 +292,6 @@ def load_video(path):
 
 
 def save_video(frames, w, h, fps, path):
-    """Save video using ffmpeg with FFV1 lossless codec for steganography."""
     if check_ffmpeg():
         try:
             cmd = [
@@ -346,8 +342,6 @@ def save_video(frames, w, h, fps, path):
 
 
 def get_video_capacity(path, lsb_mode='332'):
-    from function import get_bits_per_pixel
-    
     with VideoProcessor(path) as vp:
         total_pixels = vp.get_total_pixels()
         bits_per_pixel = get_bits_per_pixel(lsb_mode)
