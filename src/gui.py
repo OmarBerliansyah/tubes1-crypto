@@ -1152,11 +1152,37 @@ class ModernStegoGUI:
 
         desc_label = ctk.CTkLabel(
             frame,
-            text="Compare SHA-256 hashes of original and extracted files",
+            text="Compare file hashes to verify integrity",
             font=FONTS["body"],
             text_color=COLORS["text_secondary"]
         )
-        desc_label.pack(anchor="w", pady=(0, 20))
+        desc_label.pack(anchor="w", pady=(0, 10))
+
+        algo_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
+        algo_frame.pack(anchor="w", pady=(0, 20))
+
+        algo_label = ctk.CTkLabel(
+            algo_frame,
+            text="Hash Algorithm:",
+            font=FONTS["body"],
+            text_color=COLORS["text_primary"]
+        )
+        algo_label.pack(side="left", padx=(0, 10))
+
+        self.hash_algo_var = tk.StringVar(value="sha256")
+        self.hash_algo_seg = ctk.CTkSegmentedButton(
+            algo_frame,
+            values=["SHA-256", "MD5"],
+            variable=self.hash_algo_var,
+            font=FONTS["body"],
+            selected_color=COLORS["primary"],
+            selected_hover_color="#0051D5",
+            unselected_color=COLORS["input_bg"],
+            unselected_hover_color=COLORS["border"],
+            text_color=COLORS["text_primary"],
+            command=self._on_hash_algo_change
+        )
+        self.hash_algo_seg.pack(side="left")
 
         cards_frame = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
         cards_frame.pack(fill="x", pady=(0, 20))
@@ -1183,7 +1209,7 @@ class ModernStegoGUI:
 
         verify_btn = ctk.CTkButton(
             frame,
-            text="Verify Integrity (SHA-256)",
+            text="Verify Integrity",
             font=FONTS["button"],
             fg_color=COLORS["secondary"],
             text_color="white",
@@ -1239,13 +1265,13 @@ class ModernStegoGUI:
         )
         orig_hash_frame.grid(row=0, column=0, padx=(0, 10), sticky="nsew")
 
-        orig_hash_title = ctk.CTkLabel(
+        self.orig_hash_title = ctk.CTkLabel(
             orig_hash_frame,
-            text="Original File Hash",
+            text="Original File (SHA-256)",
             font=FONTS["body_bold"],
             text_color=COLORS["text_primary"]
         )
-        orig_hash_title.pack(anchor="w", padx=15, pady=(15, 10))
+        self.orig_hash_title.pack(anchor="w", padx=15, pady=(15, 10))
 
         self.orig_hash_label = ctk.CTkLabel(
             orig_hash_frame,
@@ -1263,13 +1289,13 @@ class ModernStegoGUI:
         )
         ext_hash_frame.grid(row=0, column=1, padx=(10, 0), sticky="nsew")
 
-        ext_hash_title = ctk.CTkLabel(
+        self.ext_hash_title = ctk.CTkLabel(
             ext_hash_frame,
-            text="Extracted File Hash",
+            text="Extracted File (SHA-256)",
             font=FONTS["body_bold"],
             text_color=COLORS["text_primary"]
         )
-        ext_hash_title.pack(anchor="w", padx=15, pady=(15, 10))
+        self.ext_hash_title.pack(anchor="w", padx=15, pady=(15, 10))
 
         self.ext_hash_label = ctk.CTkLabel(
             ext_hash_frame,
@@ -1520,6 +1546,19 @@ class ModernStegoGUI:
         self.current_view = self.verify_frame
         self.verify_frame.pack(fill="both", expand=True)
         self._clear_error_status()
+
+    def _on_hash_algo_change(self, value):
+        """Update hash algorithm display when selection changes"""
+        algo = value.replace("-", "").lower()
+        display_name = value
+
+        self.orig_hash_title.configure(text=f"Original File ({display_name})")
+        self.ext_hash_title.configure(text=f"Extracted File ({display_name})")
+
+        self.orig_hash_label.configure(text="--")
+        self.ext_hash_label.configure(text="--")
+        self.verify_status_label.configure(text="Waiting for verification...", text_color=COLORS["text_secondary"])
+        self.verify_status_badge.configure(fg_color=COLORS["input_bg"])
 
     def _clear_error_status(self):
         current_text = self.status_label.cget("text")
@@ -3047,18 +3086,25 @@ Histogram Correlation (Frame 0):
             self._show_modern_warning("Please select extracted file.")
             return
 
+        algo = self.hash_algo_var.get().lower().replace("-", "")
+
         try:
-            sha256_orig = hashlib.sha256()
+            if algo == "md5":
+                hash_orig = hashlib.md5()
+                hash_ext = hashlib.md5()
+            else:
+                hash_orig = hashlib.sha256()
+                hash_ext = hashlib.sha256()
+
             with open(orig_file, 'rb') as f:
                 for chunk in iter(lambda: f.read(4096), b''):
-                    sha256_orig.update(chunk)
-            orig_hash = sha256_orig.hexdigest()
+                    hash_orig.update(chunk)
+            orig_hash = hash_orig.hexdigest()
 
-            sha256_ext = hashlib.sha256()
             with open(ext_file, 'rb') as f:
                 for chunk in iter(lambda: f.read(4096), b''):
-                    sha256_ext.update(chunk)
-            ext_hash = sha256_ext.hexdigest()
+                    hash_ext.update(chunk)
+            ext_hash = hash_ext.hexdigest()
 
             orig_size = os.path.getsize(orig_file)
             ext_size = os.path.getsize(ext_file)
@@ -3077,7 +3123,7 @@ Histogram Correlation (Frame 0):
 
             self.verify_status_badge.configure(fg_color=badge_color)
             self.verify_status_label.configure(text=status, text_color=status_color)
-            self.status_label.configure(text=status)
+            self.status_label.configure(text=f"{status} ({algo.upper()})")
 
         except Exception as e:
             self._show_modern_error(f"Hash verification failed: {str(e)}")
