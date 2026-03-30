@@ -3,24 +3,21 @@
 import sys
 import os
 import argparse
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+from src.ui.app import main as gui_main
+from src.crypto.stego import VideoSteganography, StegoError
+from src.utils.metric import metrics_streaming
 
 
 def run_gui():
-    from gui import main as gui_main
     gui_main()
 
 
 def run_cli():
-    from stego import VideoSteganography, StegoError
-    from metric import metrics_streaming
-    
     print("=" * 60)
     print("Video Steganography - A5/1 & LSB")
     print("II4021 - Kriptografi, ITB")
     print("=" * 60)
-    
+
     while True:
         print("\nMenu:")
         print("  1. Embed (hide message/file in video)")
@@ -28,9 +25,9 @@ def run_cli():
         print("  3. Calculate Capacity")
         print("  4. Compare Videos (MSE/PSNR)")
         print("  0. Exit")
-        
+
         choice = input("\nPilih menu [0-4]: ").strip()
-        
+
         if choice == '0':
             print("Goodbye!")
             break
@@ -47,16 +44,13 @@ def run_cli():
 
 
 def cli_embed():
-    """CLI embed function."""
-    from stego import VideoSteganography, StegoError
-    
     print("\n--- EMBED MODE ---")
-    
+
     video_path = input("Cover video path: ").strip().strip('"')
     if not os.path.exists(video_path):
         print(f"Error: Video not found: {video_path}")
         return
-    
+
     print("\nLSB Mode:")
     print("  1. 1-1-1 (3 bits/pixel) - Most subtle")
     print("  2. 2-2-2 (6 bits/pixel) - Balanced")
@@ -64,16 +58,16 @@ def cli_embed():
     lsb_choice = input("Choose LSB mode [1-3, default=3]: ").strip() or '3'
     lsb_map = {'1': '111', '2': '222', '3': '332'}
     lsb_mode = lsb_map.get(lsb_choice, '332')
-    
+
     stego = VideoSteganography(lsb_mode)
     cap = stego.calculate_capacity(video_path)
     print(f"\nCapacity: {cap['payload_capacity_bytes']:,} bytes ({cap['payload_capacity_bytes']/1024:.2f} KB)")
-    
+
     print("\nPayload type:")
     print("  1. Text message")
     print("  2. File")
     payload_type = input("Choose [1-2]: ").strip()
-    
+
     if payload_type == '1':
         print("Enter message (press Enter twice to finish):")
         lines = []
@@ -94,29 +88,29 @@ def cli_embed():
             payload_data = f.read()
         extension = os.path.splitext(file_path)[1]
         print(f"File size: {len(payload_data):,} bytes")
-    
+
     if len(payload_data) * 8 > cap['payload_capacity_bits']:
         print(f"Error: Payload too large! Max: {cap['payload_capacity_bytes']:,} bytes")
         return
-    
+
     use_enc = input("\nEnable A5/1 encryption? [y/n]: ").lower() == 'y'
     enc_key = None
     if use_enc:
         enc_key = input("Encryption key (hex or password): ").strip()
-    
+
     use_random = input("Enable random pixel spreading? [y/n]: ").lower() == 'y'
     stego_key = None
     if use_random:
         stego_key = input("Stego key: ").strip()
-    
+
     output_path = input("\nOutput video path [default: stego_output.avi]: ").strip() or 'stego_output.avi'
-    
+
     print("\nEmbedding...")
-    
+
     def progress(current, total, status):
         pct = (current / total) * 100
         print(f"\r{status}: {current}/{total} ({pct:.1f}%)", end='', flush=True)
-    
+
     try:
         result = stego.embed(
             video_path, output_path, payload_data, extension,
@@ -134,31 +128,28 @@ def cli_embed():
 
 
 def cli_extract():
-    """CLI extract function."""
-    from stego import VideoSteganography, StegoError
-    
     print("\n--- EXTRACT MODE ---")
-    
+
     video_path = input("Stego video path: ").strip().strip('"')
     if not os.path.exists(video_path):
         print(f"Error: Video not found: {video_path}")
         return
-    
+
     enc_key = input("Encryption key (leave empty if not encrypted): ").strip() or None
     stego_key = input("Stego key (leave empty if sequential): ").strip() or None
-    
+
     output_dir = input("Output directory [default: current]: ").strip() or '.'
-    
+
     print("\nExtracting...")
-    
+
     def progress(current, total, status):
         pct = (current / total) * 100
         print(f"\r{status}: {current}/{total} ({pct:.1f}%)", end='', flush=True)
-    
+
     try:
         stego = VideoSteganography()
         result = stego.extract_to_file(video_path, output_dir, enc_key, stego_key, progress_callback=progress)
-        
+
         print(f"\n\nSuccess!")
         print(f"Output: {result['output_path']}")
         print(f"Size: {result['size_bytes']:,} bytes")
@@ -166,14 +157,14 @@ def cli_extract():
         print(f"Was encrypted: {result['was_encrypted']}")
         print(f"Was random: {result['was_random']}")
         print(f"LSB mode: {result['lsb_mode']}")
-        
+
         if result['extension'] == '.txt' or not result['extension']:
             try:
                 text = result['data'].decode('utf-8')
                 print(f"\n--- Message ---\n{text}")
             except:
                 pass
-                
+
     except StegoError as e:
         print(f"\nError: {e}")
     except Exception as e:
@@ -181,16 +172,13 @@ def cli_extract():
 
 
 def cli_capacity():
-    """CLI capacity calculation."""
-    from stego import VideoSteganography
-    
     print("\n--- CAPACITY CALCULATOR ---")
-    
+
     video_path = input("Video path: ").strip().strip('"')
     if not os.path.exists(video_path):
         print(f"Error: Video not found: {video_path}")
         return
-    
+
     print("\nCapacity by LSB mode:")
     for mode, name in [('111', '1-1-1'), ('222', '2-2-2'), ('332', '3-3-2')]:
         stego = VideoSteganography(mode)
@@ -199,29 +187,25 @@ def cli_capacity():
 
 
 def cli_metrics():
-    """CLI metrics calculation."""
-    from metric import metrics_streaming
-    
     print("\n--- VIDEO COMPARISON ---")
-    
     orig_path = input("Original video path: ").strip().strip('"')
     if not os.path.exists(orig_path):
         print(f"Error: Video not found: {orig_path}")
         return
-    
+
     stego_path = input("Stego video path: ").strip().strip('"')
     if not os.path.exists(stego_path):
         print(f"Error: Video not found: {stego_path}")
         return
-    
+
     print("\nCalculating metrics...")
-    
+
     def progress(current, total):
         pct = (current / total) * 100
         print(f"\rProgress: {current}/{total} ({pct:.1f}%)", end='', flush=True)
-    
+
     mse, psnr = metrics_streaming(orig_path, stego_path, progress)
-    
+
     print(f"\n\nResults:")
     print(f"  MSE: {mse:.6f}")
     print(f"  PSNR: {psnr:.2f} dB")
@@ -251,9 +235,9 @@ def main():
     parser.add_argument('--cli', action='store_true', help='Run in CLI mode')
     parser.add_argument('--embed', action='store_true', help='Quick embed mode')
     parser.add_argument('--extract', action='store_true', help='Quick extract mode')
-    
+
     args = parser.parse_args()
-    
+
     if args.cli:
         run_cli()
     elif args.embed:
