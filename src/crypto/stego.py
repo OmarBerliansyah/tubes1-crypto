@@ -3,8 +3,7 @@ import tempfile
 import shutil
 from ..utils.video import VideoProcessor, VideoWriter, extract_audio, mux_audio_video, has_audio
 from ..utils.function import (
-    bytes_to_bits, bits_to_bytes, file_to_bits, bits_to_file,
-    create_header, parse_header, put, extract_from_pixel, merge,
+    bytes_to_bits, bits_to_bytes, create_header, parse_header, put, extract_from_pixel, merge,
     get_bits_per_pixel, get_lsb_config, int_to_bits, bits_to_int
 )
 from ..utils.seed import FramePixelGenerator
@@ -206,20 +205,6 @@ class VideoSteganography:
         finally:
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
-    
-    def embed_file(self, video_path, output_path, file_path,
-                   use_encryption=False, encryption_key=None,
-                   use_random=False, stego_key=None, progress_callback=None):
-        with open(file_path, 'rb') as f:
-            payload_data = f.read()
-        
-        extension = os.path.splitext(file_path)[1]
-        
-        return self.embed(
-            video_path, output_path, payload_data,
-            extension, use_encryption, encryption_key,
-            use_random, stego_key, progress_callback
-        )
     
     def extract(self, video_path, encryption_key=None, stego_key=None, progress_callback=None):
         with VideoProcessor(video_path) as reader:

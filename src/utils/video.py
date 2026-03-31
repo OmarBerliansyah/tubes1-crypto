@@ -1,9 +1,10 @@
 import cv2
 import os
 import subprocess
-import tempfile
-import shutil
+
 from .function import get_bits_per_pixel
+
+SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 
 
 class VideoProcessor:
@@ -33,7 +34,6 @@ class VideoProcessor:
         return self.total_frames * self.w * self.h
     
     def read_frame(self, frame_idx=None):
-        """Read a specific frame or next frame."""
         if frame_idx is not None:
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = self.cap.read()
@@ -42,7 +42,6 @@ class VideoProcessor:
         return frame
     
     def reset(self):
-        """Reset to beginning of video."""
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     
     def release(self):
@@ -97,7 +96,7 @@ class VideoWriter:
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                creationflags=SUBPROCESS_FLAGS
             )
         except Exception as e:
             print(f"FFmpeg initialization failed: {e}. Falling back to OpenCV.")
@@ -148,7 +147,7 @@ def check_ffmpeg():
             ['ffmpeg', '-version'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            creationflags=SUBPROCESS_FLAGS
         )
         return result.returncode == 0
     except FileNotFoundError:
@@ -169,7 +168,7 @@ def extract_audio(video_path, audio_path):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            creationflags=SUBPROCESS_FLAGS
         )
         success = result.returncode == 0 and os.path.exists(audio_path)
         if not success and result.stderr:
@@ -194,7 +193,7 @@ def has_audio(video_path):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            creationflags=SUBPROCESS_FLAGS
         )
         return b'audio' in result.stdout
     except Exception:
@@ -220,7 +219,7 @@ def mux_audio_video(video_path, audio_path, output_path):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            creationflags=SUBPROCESS_FLAGS
         )
         if result.returncode == 0:
             return True
@@ -230,50 +229,6 @@ def mux_audio_video(video_path, audio_path, output_path):
     except Exception as e:
         print(f"Exception in mux_audio_video: {e}")
         return False
-    except Exception:
-        return False
-
-
-def process_video_with_audio(input_path, output_path, frame_processor_func, progress_callback=None):
-    temp_dir = tempfile.mkdtemp()
-    temp_video = os.path.join(temp_dir, 'temp_video.avi')
-    temp_audio = os.path.join(temp_dir, 'temp_audio.aac')
-    
-    try:
-        video_has_audio = has_audio(input_path)
-        if video_has_audio:
-            extract_audio(input_path, temp_audio)
-        
-        with VideoProcessor(input_path) as reader:
-            w, h, fps, total = reader.get_info()
-            
-            with VideoWriter(temp_video, w, h, fps) as writer:
-                for frame_idx in range(total):
-                    frame = reader.read_frame()
-                    if frame is None:
-                        break
-                    
-                    processed = frame_processor_func(frame, frame_idx)
-                    writer.write_frame(processed)
-                    
-                    if progress_callback:
-                        progress_callback(frame_idx + 1, total)
-        
-        if video_has_audio and os.path.exists(temp_audio):
-            success = mux_audio_video(temp_video, temp_audio, output_path)
-            if not success:
-                shutil.copy(temp_video, output_path)
-        else:
-            shutil.copy(temp_video, output_path)
-        
-        return True
-        
-    except Exception as e:
-        raise e
-    finally:
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
 
 def load_video(path):
     cap = cv2.VideoCapture(path)
@@ -317,7 +272,7 @@ def save_video(frames, w, h, fps, path):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                creationflags=SUBPROCESS_FLAGS
             )
             
             for frame in frames:
@@ -339,10 +294,3 @@ def save_video(frames, w, h, fps, path):
         for f in frames:
             out.write(f)
         out.release()
-
-
-def get_video_capacity(path, lsb_mode='332'):
-    with VideoProcessor(path) as vp:
-        total_pixels = vp.get_total_pixels()
-        bits_per_pixel = get_bits_per_pixel(lsb_mode)
-        return total_pixels * bits_per_pixel

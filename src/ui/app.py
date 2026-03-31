@@ -3,6 +3,8 @@ import time
 import threading
 import tkinter as tk
 from tkinter import filedialog
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw
@@ -213,12 +215,6 @@ class ModernStegoGUI(DialogsMixin):
             command=self._browse_video
         )
         select_btn.pack(pady=(30, 10))
-
-        # if TKDND_AVAILABLE:
-        #     center_frame.drop_target_register(DND_FILES)
-        #     center_frame.dnd_bind('<<Drop>>', lambda e: self._handle_embed_drop(e))
-        #     center_frame.dnd_bind('<<DropEnter>>', lambda e: or_label.configure(text="Drop video file here", text_color=COLORS["primary"], font=FONTS["body_bold"]))
-        #     center_frame.dnd_bind('<<DropLeave>>', lambda e: or_label.configure(text="or drag and drop a video file here", text_color=COLORS["text_secondary"], font=FONTS["small"]))
 
         self.embed_config = ctk.CTkFrame(frame, fg_color="transparent", corner_radius=0)
 
@@ -2387,10 +2383,6 @@ Interpretation:
         return orig_path, stego_path
 
     def _embed_figure_in_viz(self, fig, title):
-        """Embed a matplotlib figure into the analysis visualization frame"""
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-        import matplotlib.pyplot as plt
-
         fig.patch.set_facecolor(COLORS["card"])
         for ax in fig.axes:
             ax.set_facecolor(COLORS["card"])

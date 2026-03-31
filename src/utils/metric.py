@@ -18,21 +18,6 @@ def calculate_psnr(mse, max_pixel=255.0):
     return 20 * np.log10(max_pixel / np.sqrt(mse))
 
 
-def metrics(original, modified):
-    mse_values = []
-    
-    if isinstance(original, list) and isinstance(modified, list):
-        for ori, mod in zip(original, modified):
-            mse_values.append(calculate_mse(ori, mod))
-    else:
-        raise ValueError("Both inputs must be lists of frames")
-    
-    avg_mse = np.mean(mse_values) if mse_values else 0.0
-    psnr = calculate_psnr(avg_mse)
-    
-    return avg_mse, psnr
-
-
 def metrics_streaming(original_path, modified_path, progress_callback=None):
     mse_values = []
     
@@ -114,8 +99,6 @@ def validate_frame(frame, name="Frame"):
 
 
 def plot_histogram_comparison(original_frame, stego_frame, save_path=None):
-    import matplotlib.pyplot as plt
-    
     orig_r, orig_g, orig_b = calculate_rgb_histograms(original_frame)
     stego_r, stego_g, stego_b = calculate_rgb_histograms(stego_frame)
     
@@ -157,157 +140,6 @@ def plot_histogram_comparison(original_frame, stego_frame, save_path=None):
     
     return fig
 
-
-def plot_histogram_overlay(original_frame, stego_frame, save_path=None):
-    orig_valid, orig_msg = validate_frame(original_frame, "Original")
-    stego_valid, stego_msg = validate_frame(stego_frame, "Stego")
-    
-    if not orig_valid or not stego_valid:
-        print(f"WARNING: {orig_msg}")
-        print(f"WARNING: {stego_msg}")
-    
-    orig_r, orig_g, orig_b = calculate_rgb_histograms(original_frame)
-    stego_r, stego_g, stego_b = calculate_rgb_histograms(stego_frame)
-    
-    diff_r = stego_r - orig_r
-    diff_g = stego_g - orig_g
-    diff_b = stego_b - orig_b
-    
-    fig, axes = plt.subplots(3, 3, figsize=(14, 11))
-    fig.suptitle('LSB Steganography Histogram Analysis', fontsize=13, fontweight='bold', y=0.98)
-    
-    x = np.arange(256)
-    zoom_start, zoom_end = 100, 200
-    
-    axes[0, 0].plot(x, orig_r, 'r-', alpha=0.7, label='Original', linewidth=1.5)
-    axes[0, 0].plot(x, stego_r, 'r--', alpha=0.7, label='Stego', linewidth=1.5)
-    axes[0, 0].set_title('Red (Full)', fontsize=10)
-    axes[0, 0].set_xlabel('Pixel Value', fontsize=8)
-    axes[0, 0].set_ylabel('Frequency', fontsize=8)
-    axes[0, 0].legend(fontsize=7)
-    axes[0, 0].tick_params(labelsize=7)
-    
-    axes[0, 1].plot(x, orig_g, 'g-', alpha=0.7, label='Original', linewidth=1.5)
-    axes[0, 1].plot(x, stego_g, 'g--', alpha=0.7, label='Stego', linewidth=1.5)
-    axes[0, 1].set_title('Green (Full)', fontsize=10)
-    axes[0, 1].set_xlabel('Pixel Value', fontsize=8)
-    axes[0, 1].legend(fontsize=7)
-    axes[0, 1].tick_params(labelsize=7)
-    
-    axes[0, 2].plot(x, orig_b, 'b-', alpha=0.7, label='Original', linewidth=1.5)
-    axes[0, 2].plot(x, stego_b, 'b--', alpha=0.7, label='Stego', linewidth=1.5)
-    axes[0, 2].set_title('Blue (Full)', fontsize=10)
-    axes[0, 2].set_xlabel('Pixel Value', fontsize=8)
-    axes[0, 2].legend(fontsize=7)
-    axes[0, 2].tick_params(labelsize=7)
-    
-    x_zoom = x[zoom_start:zoom_end]
-    
-    axes[1, 0].bar(x_zoom - 0.2, orig_r[zoom_start:zoom_end], width=0.4, 
-                   color='red', alpha=0.6, label='Original')
-    axes[1, 0].bar(x_zoom + 0.2, stego_r[zoom_start:zoom_end], width=0.4, 
-                   color='darkred', alpha=0.6, label='Stego')
-    axes[1, 0].set_title(f'Red (Zoom {zoom_start}-{zoom_end})', fontsize=10)
-    axes[1, 0].set_xlabel('Pixel Value', fontsize=8)
-    axes[1, 0].set_ylabel('Frequency', fontsize=8)
-    axes[1, 0].legend(fontsize=7)
-    axes[1, 0].set_xlim(zoom_start - 1, zoom_end + 1)
-    axes[1, 0].tick_params(labelsize=7)
-    
-    axes[1, 1].bar(x_zoom - 0.2, orig_g[zoom_start:zoom_end], width=0.4, 
-                   color='green', alpha=0.6, label='Original')
-    axes[1, 1].bar(x_zoom + 0.2, stego_g[zoom_start:zoom_end], width=0.4, 
-                   color='darkgreen', alpha=0.6, label='Stego')
-    axes[1, 1].set_title(f'Green (Zoom {zoom_start}-{zoom_end})', fontsize=10)
-    axes[1, 1].set_xlabel('Pixel Value', fontsize=8)
-    axes[1, 1].legend(fontsize=7)
-    axes[1, 1].set_xlim(zoom_start - 1, zoom_end + 1)
-    axes[1, 1].tick_params(labelsize=7)
-    
-    axes[1, 2].bar(x_zoom - 0.2, orig_b[zoom_start:zoom_end], width=0.4, 
-                   color='blue', alpha=0.6, label='Original')
-    axes[1, 2].bar(x_zoom + 0.2, stego_b[zoom_start:zoom_end], width=0.4, 
-                   color='darkblue', alpha=0.6, label='Stego')
-    axes[1, 2].set_title(f'Blue (Zoom {zoom_start}-{zoom_end})', fontsize=10)
-    axes[1, 2].set_xlabel('Pixel Value', fontsize=8)
-    axes[1, 2].legend(fontsize=7)
-    axes[1, 2].set_xlim(zoom_start - 1, zoom_end + 1)
-    axes[1, 2].tick_params(labelsize=7)
-    
-    axes[2, 0].bar(x, diff_r, color='red', alpha=0.7, width=1.0)
-    axes[2, 0].axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-    axes[2, 0].set_title('Red (Residual)', fontsize=10)
-    axes[2, 0].set_xlabel('Pixel Value', fontsize=8)
-    axes[2, 0].set_ylabel('Difference', fontsize=8)
-    axes[2, 0].tick_params(labelsize=7)
-    max_diff_r = max(abs(diff_r.min()), abs(diff_r.max())) * 1.1
-    if max_diff_r > 0:
-        axes[2, 0].set_ylim(-max_diff_r, max_diff_r)
-    
-    axes[2, 1].bar(x, diff_g, color='green', alpha=0.7, width=1.0)
-    axes[2, 1].axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-    axes[2, 1].set_title('Green (Residual)', fontsize=10)
-    axes[2, 1].set_xlabel('Pixel Value', fontsize=8)
-    axes[2, 1].tick_params(labelsize=7)
-    max_diff_g = max(abs(diff_g.min()), abs(diff_g.max())) * 1.1
-    if max_diff_g > 0:
-        axes[2, 1].set_ylim(-max_diff_g, max_diff_g)
-    
-    axes[2, 2].bar(x, diff_b, color='blue', alpha=0.7, width=1.0)
-    axes[2, 2].axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-    axes[2, 2].set_title('Blue (Residual)', fontsize=10)
-    axes[2, 2].set_xlabel('Pixel Value', fontsize=8)
-    axes[2, 2].tick_params(labelsize=7)
-    max_diff_b = max(abs(diff_b.min()), abs(diff_b.max())) * 1.1
-    if max_diff_b > 0:
-        axes[2, 2].set_ylim(-max_diff_b, max_diff_b)
-    
-    total_changed = int(np.sum(np.abs(diff_r)) + np.sum(np.abs(diff_g)) + np.sum(np.abs(diff_b))) // 2
-    fig.text(0.5, 0.01, f'Total pixel shifts: {total_changed:,}', 
-             ha='center', fontsize=9, style='italic')
-    
-    plt.subplots_adjust(hspace=0.35, wspace=0.25, top=0.93, bottom=0.06)
-    
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    
-    return fig
-
-
-def plot_histogram_simple(original_frame, stego_frame, save_path=None):
-    orig_r, orig_g, orig_b = calculate_rgb_histograms(original_frame)
-    stego_r, stego_g, stego_b = calculate_rgb_histograms(stego_frame)
-    
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-    fig.suptitle('Histogram Overlay: Original (solid) vs Stego (dashed)', fontsize=12)
-    
-    x = np.arange(256)
-    
-    axes[0].plot(x, orig_r, 'r-', alpha=0.8, label='Original', linewidth=1)
-    axes[0].plot(x, stego_r, 'r--', alpha=0.8, label='Stego', linewidth=1)
-    axes[0].set_title('Red Channel')
-    axes[0].set_xlabel('Pixel Value')
-    axes[0].set_ylabel('Frequency')
-    axes[0].legend()
-    
-    axes[1].plot(x, orig_g, 'g-', alpha=0.8, label='Original', linewidth=1)
-    axes[1].plot(x, stego_g, 'g--', alpha=0.8, label='Stego', linewidth=1)
-    axes[1].set_title('Green Channel')
-    axes[1].set_xlabel('Pixel Value')
-    axes[1].legend()
-    
-    axes[2].plot(x, orig_b, 'b-', alpha=0.8, label='Original', linewidth=1)
-    axes[2].plot(x, stego_b, 'b--', alpha=0.8, label='Stego', linewidth=1)
-    axes[2].set_title('Blue Channel')
-    axes[2].set_xlabel('Pixel Value')
-    axes[2].legend()
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    
-    return fig
 
 
 def plot_histogram_residual(original_frame, stego_frame, save_path=None):
@@ -477,29 +309,3 @@ def plot_multiframe_residual(orig_path, stego_path, sample_count=10, start_frame
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
     
     return fig
-
-
-def get_video_statistics(video_path, sample_frames=10):
-    stats = {'r': [], 'g': [], 'b': []}
-    
-    with VideoProcessor(video_path) as vp:
-        total = vp.total_frames
-        step = max(1, total // sample_frames)
-        
-        for i in range(0, total, step):
-            frame = vp.read_frame(i)
-            if frame is None:
-                break
-            
-            stats['b'].append(np.mean(frame[:, :, 0]))
-            stats['g'].append(np.mean(frame[:, :, 1]))
-            stats['r'].append(np.mean(frame[:, :, 2]))
-    
-    return {
-        'r_mean': np.mean(stats['r']),
-        'g_mean': np.mean(stats['g']),
-        'b_mean': np.mean(stats['b']),
-        'r_std': np.std(stats['r']),
-        'g_std': np.std(stats['g']),
-        'b_std': np.std(stats['b']),
-    }

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import sys
 import os
 import argparse
 from src import gui_main, VideoSteganography, StegoError, metrics_streaming
