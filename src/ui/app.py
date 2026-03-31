@@ -1,20 +1,17 @@
 import os
-import sys
 import time
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw
-import cv2
 
 from ..crypto.stego import VideoSteganography, StegoError
 from ..utils.video import VideoProcessor, check_ffmpeg
 from ..utils.metric import (
-    metrics_streaming, plot_histogram_comparison,
-    plot_histogram_overlay, plot_multiframe_residual,
-    compare_histograms
+    metrics_streaming, plot_histogram_residual,
+    plot_multiframe_residual
 )
 from .constants import COLORS, FONTS
 from .dialogs import DialogsMixin
@@ -35,11 +32,12 @@ class ModernStegoGUI(DialogsMixin):
         self.extract_output_dir = tk.StringVar()
 
         self.lsb_mode = tk.StringVar(value='332')
-        self.use_encryption = tk.BooleanVar(value=False)
+        self.use_encryption = tk.BooleanVar(value=True)
         self.encryption_key = tk.StringVar()
         self.use_random = tk.BooleanVar(value=False)
         self.stego_key = tk.StringVar()
         self.use_text_message = tk.BooleanVar(value=True)
+        self.analysis_frame_index = tk.IntVar(value=3)
 
         self.is_processing = False
         self.current_tab = "embed"
@@ -422,58 +420,46 @@ class ModernStegoGUI(DialogsMixin):
         security_section = self._create_section_card(scroll_frame, "Security")
         security_section.pack(fill="x", pady=(0, 15))
 
-        enc_frame = ctk.CTkFrame(security_section, fg_color="transparent", corner_radius=0)
-        enc_frame.pack(fill="x", padx=15, pady=(15, 10))
+        enc_label_row = ctk.CTkFrame(security_section, fg_color="transparent", corner_radius=0)
+        enc_label_row.pack(fill="x", padx=15, pady=(15, 10))
 
-        self.enc_switch = ctk.CTkSwitch(
-            enc_frame,
-            text="Enable A5/1 Encryption",
-            font=FONTS["body"],
-            text_color=COLORS["text_primary"],
-            fg_color=COLORS["border"],
-            progress_color=COLORS["primary"],
-            button_color="white",
-            button_hover_color=COLORS["primary"],
-            command=self._toggle_encryption_ui
+        enc_label = ctk.CTkLabel(
+            enc_label_row,
+            text="A5/1 Encryption Key (Required):",
+            font=FONTS["body_bold"],
+            text_color=COLORS["text_primary"]
         )
-        self.enc_switch.pack(side="left")
+        enc_label.pack(side="left")
 
-        self.enc_key_frame = ctk.CTkFrame(security_section, fg_color="transparent", corner_radius=0)
-
-        enc_key_label = ctk.CTkLabel(
-            self.enc_key_frame,
-            text="Encryption Key:",
-            font=FONTS["body"],
-            text_color=COLORS["text_secondary"]
-        )
-        enc_key_label.pack(side="left", padx=(0, 10))
+        enc_key_frame = ctk.CTkFrame(security_section, fg_color="transparent", corner_radius=0)
+        enc_key_frame.pack(fill="x", padx=15, pady=(0, 15))
 
         self.enc_key_entry = ctk.CTkEntry(
-            self.enc_key_frame,
+            enc_key_frame,
             font=FONTS["body"],
             fg_color=COLORS["input_bg"],
             text_color=COLORS["text_primary"],
             border_color=COLORS["border"],
             border_width=1,
             corner_radius=8,
-            height=35,
-            width=250,
-            show="*"
+            height=40,
+            show="*",
+            placeholder_text="Enter encryption password..."
         )
-        self.enc_key_entry.pack(side="left", padx=(0, 10))
+        self.enc_key_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         self.enc_key_entry.insert(0, self.encryption_key.get())
         self.enc_key_entry.bind("<KeyRelease>", lambda e: self.encryption_key.set(self.enc_key_entry.get()))
 
         show_enc_btn = ctk.CTkButton(
-            self.enc_key_frame,
+            enc_key_frame,
             text="Show",
             font=FONTS["small"],
             fg_color=COLORS["input_bg"],
             text_color=COLORS["text_secondary"],
             hover_color=COLORS["border"],
-            height=30,
-            width=60,
+            height=40,
+            width=70,
             command=lambda: self._toggle_password_visibility(self.enc_key_entry)
         )
         show_enc_btn.pack(side="left")
@@ -757,20 +743,19 @@ class ModernStegoGUI(DialogsMixin):
         )
         self.stego_details_label.pack(anchor="w", padx=15, pady=(0, 15))
 
-        keys_section = self._create_section_card(scroll_frame, "Decryption Keys (Optional)")
+        keys_section = self._create_section_card(scroll_frame, "Decryption Keys")
         keys_section.pack(fill="x", pady=(0, 15))
 
-        enc_row = ctk.CTkFrame(keys_section, fg_color="transparent", corner_radius=0)
-        enc_row.pack(fill="x", padx=15, pady=(15, 10))
-
-        enc_label = ctk.CTkLabel(
-            enc_row,
-            text="A5/1 Key:",
-            font=FONTS["body"],
-            text_color=COLORS["text_secondary"],
-            width=100
+        enc_label_header = ctk.CTkLabel(
+            keys_section,
+            text="A5/1 Encryption Key (Required):",
+            font=FONTS["body_bold"],
+            text_color=COLORS["text_primary"]
         )
-        enc_label.pack(side="left")
+        enc_label_header.pack(anchor="w", padx=15, pady=(15, 5))
+
+        enc_row = ctk.CTkFrame(keys_section, fg_color="transparent", corner_radius=0)
+        enc_row.pack(fill="x", padx=15, pady=(0, 15))
 
         self.extract_enc_entry = ctk.CTkEntry(
             enc_row,
@@ -782,21 +767,33 @@ class ModernStegoGUI(DialogsMixin):
             corner_radius=8,
             height=40,
             show="*",
-            placeholder_text="Enter if encrypted..."
+            placeholder_text="Enter encryption password..."
         )
-        self.extract_enc_entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
+        self.extract_enc_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        show_extract_enc_btn = ctk.CTkButton(
+            enc_row,
+            text="Show",
+            font=FONTS["small"],
+            fg_color=COLORS["input_bg"],
+            text_color=COLORS["text_secondary"],
+            hover_color=COLORS["border"],
+            height=40,
+            width=70,
+            command=lambda: self._toggle_password_visibility(self.extract_enc_entry)
+        )
+        show_extract_enc_btn.pack(side="left")
+
+        stego_label_header = ctk.CTkLabel(
+            keys_section,
+            text="Stego Key:",
+            font=FONTS["body"],
+            text_color=COLORS["text_secondary"]
+        )
+        stego_label_header.pack(anchor="w", padx=15, pady=(0, 5))
 
         stego_row = ctk.CTkFrame(keys_section, fg_color="transparent", corner_radius=0)
         stego_row.pack(fill="x", padx=15, pady=(0, 15))
-
-        stego_label = ctk.CTkLabel(
-            stego_row,
-            text="Stego Key:",
-            font=FONTS["body"],
-            text_color=COLORS["text_secondary"],
-            width=100
-        )
-        stego_label.pack(side="left")
 
         self.extract_stego_entry = ctk.CTkEntry(
             stego_row,
@@ -807,9 +804,9 @@ class ModernStegoGUI(DialogsMixin):
             border_width=1,
             corner_radius=8,
             height=40,
-            placeholder_text="Enter if random spreading used..."
+            placeholder_text="Enter stego key (leave empty if sequential)..."
         )
-        self.extract_stego_entry.pack(side="left", fill="x", expand=True, padx=(10, 0))
+        self.extract_stego_entry.pack(side="left", fill="x", expand=True)
 
         output_section = self._create_section_card(scroll_frame, "Output Directory")
         output_section.pack(fill="x", pady=(0, 15))
@@ -970,34 +967,61 @@ class ModernStegoGUI(DialogsMixin):
         )
         self.stego_card.grid(row=0, column=1, padx=(10, 0), sticky="nsew")
 
+        frame_input_section = ctk.CTkFrame(scroll, fg_color="transparent", corner_radius=0)
+        frame_input_section.pack(fill="x", pady=(15, 0))
+
+        frame_label = ctk.CTkLabel(
+            frame_input_section,
+            text="Frame Index to Analyze:",
+            font=FONTS["body"],
+            text_color=COLORS["text_secondary"]
+        )
+        frame_label.pack(side="left", padx=(0, 10))
+
+        self.frame_index_entry = ctk.CTkEntry(
+            frame_input_section,
+            font=FONTS["body"],
+            fg_color=COLORS["input_bg"],
+            text_color=COLORS["text_primary"],
+            border_color=COLORS["border"],
+            border_width=1,
+            corner_radius=8,
+            height=35,
+            width=100
+        )
+        self.frame_index_entry.pack(side="left")
+        self.frame_index_entry.insert(0, "3")
+        self.frame_index_entry.bind("<KeyRelease>", lambda e: self._update_frame_index())
+
+        frame_info_label = ctk.CTkLabel(
+            frame_input_section,
+            text="(Payload starts at frame 3)",
+            font=FONTS["small"],
+            text_color=COLORS["text_secondary"]
+        )
+        frame_info_label.pack(side="left", padx=(10, 0))
+
         actions_frame = ctk.CTkFrame(scroll, fg_color="transparent", corner_radius=0)
-        actions_frame.pack(fill="x", pady=(0, 15))
+        actions_frame.pack(fill="x", pady=(15, 15))
 
         self.mse_btn = ctk.CTkButton(
             actions_frame, text="Calculate MSE & PSNR", font=FONTS["body"],
             fg_color=COLORS["primary"], text_color="white", hover_color="#0051D5",
-            height=40, command=self._calculate_metrics
+            height=40, width=180, command=self._calculate_metrics
         )
         self.mse_btn.pack(side="left", padx=(0, 10))
 
-        self.hist_compare_btn = ctk.CTkButton(
-            actions_frame, text="Compare Histogram", font=FONTS["body"],
+        self.hist_residual_btn = ctk.CTkButton(
+            actions_frame, text="Show Residual Histogram", font=FONTS["body"],
             fg_color=COLORS["secondary"], text_color="white", hover_color="#1A365D",
-            height=40, command=self._show_histogram
+            height=40, width=200, command=self._show_histogram_residual
         )
-        self.hist_compare_btn.pack(side="left", padx=(0, 10))
-
-        self.hist_overlay_btn = ctk.CTkButton(
-            actions_frame, text="Overlay Histogram", font=FONTS["body"],
-            fg_color=COLORS["input_bg"], text_color=COLORS["text_secondary"],
-            hover_color=COLORS["border"], height=40, command=self._show_histogram_overlay
-        )
-        self.hist_overlay_btn.pack(side="left", padx=(0, 10))
+        self.hist_residual_btn.pack(side="left", padx=(0, 10))
 
         self.multi_btn = ctk.CTkButton(
             actions_frame, text="Multi-Frame Analysis", font=FONTS["body"],
             fg_color=COLORS["input_bg"], text_color=COLORS["text_secondary"],
-            hover_color=COLORS["border"], height=40, command=self._show_multiframe_analysis
+            hover_color=COLORS["border"], height=40, width=180, command=self._show_multiframe_analysis
         )
         self.multi_btn.pack(side="left")
 
@@ -1031,8 +1055,28 @@ class ModernStegoGUI(DialogsMixin):
         self.psnr_card.pack_propagate(False)
         psnr_inner = ctk.CTkFrame(self.psnr_card, fg_color="transparent")
         psnr_inner.pack(side="left", fill="y", padx=25, pady=20)
-        ctk.CTkLabel(psnr_inner, text="Peak Signal-to-Noise Ratio", font=FONTS["small"],
-                     text_color=COLORS["text_secondary"]).pack(anchor="w")
+        
+        psnr_title_row = ctk.CTkFrame(psnr_inner, fg_color="transparent")
+        psnr_title_row.pack(anchor="w")
+        ctk.CTkLabel(psnr_title_row, text="Peak Signal-to-Noise Ratio", font=FONTS["small"],
+                     text_color=COLORS["text_secondary"]).pack(side="left")
+        
+        info_btn = ctk.CTkButton(
+            psnr_title_row,
+            text="i",
+            font=("JetBrains Mono", 10, "bold"),
+            fg_color="transparent",
+            text_color=COLORS["primary"],
+            hover_color=COLORS["input_bg"],
+            border_width=2,
+            border_color=COLORS["primary"],
+            width=20,
+            height=20,
+            corner_radius=10,
+            command=self._show_psnr_info
+        )
+        info_btn.pack(side="left", padx=(5, 0))
+        
         self.psnr_value_label = ctk.CTkLabel(psnr_inner, text="-- dB", font=FONTS["header"],
                                              text_color=COLORS["success"])
         self.psnr_value_label.pack(anchor="w")
@@ -1060,23 +1104,6 @@ class ModernStegoGUI(DialogsMixin):
         self.viz_placeholder.pack(pady=(10, 30))
 
         self.histogram_canvas = None
-
-        self.analysis_summary_frame = ctk.CTkFrame(
-            scroll, fg_color=COLORS["card"], corner_radius=12,
-            border_width=1, border_color=COLORS["border"]
-        )
-
-        ctk.CTkLabel(self.analysis_summary_frame, text="Analysis Summary",
-                     font=FONTS["subtitle"], text_color=COLORS["secondary"]
-                     ).pack(anchor="w", padx=25, pady=(20, 10))
-
-        self.analysis_result = ctk.CTkTextbox(
-            self.analysis_summary_frame, font=FONTS["small"],
-            fg_color=COLORS["input_bg"], text_color=COLORS["text_primary"],
-            border_color=COLORS["border"], border_width=1,
-            corner_radius=10, height=120
-        )
-        self.analysis_result.pack(fill="x", padx=25, pady=(0, 20))
 
         return frame
 
@@ -1510,6 +1537,15 @@ class ModernStegoGUI(DialogsMixin):
         current = entry.cget("show")
         entry.configure(show="" if current == "*" else "*")
 
+    def _update_frame_index(self):
+        try:
+            value = int(self.frame_index_entry.get())
+            if value < 0:
+                value = 0
+            self.analysis_frame_index.set(value)
+        except ValueError:
+            pass
+
     def _set_payload_type(self, is_text):
         self.use_text_message.set(is_text)
         if is_text:
@@ -1545,16 +1581,6 @@ class ModernStegoGUI(DialogsMixin):
 
         if self.video_path.get() and os.path.exists(self.video_path.get()):
             self._update_video_info()
-
-    def _toggle_encryption_ui(self):
-        is_on = self.enc_switch.get()
-        self.use_encryption.set(is_on)
-        if is_on:
-            self.enc_key_frame.pack(fill="x", padx=15, pady=(0, 15))
-        else:
-            self.enc_key_frame.pack_forget()
-            self.encryption_key.set("")
-            self.enc_key_entry.delete(0, "end")
 
     def _toggle_random_ui(self):
         is_on = self.spread_switch.get()
@@ -1653,6 +1679,14 @@ class ModernStegoGUI(DialogsMixin):
             filetypes=[("AVI files (Recommended)", "*.avi"), ("All files", "*.*")]
         )
         if path:
+            parent_dir = os.path.dirname(path)
+            if parent_dir and not os.path.exists(parent_dir):
+                try:
+                    os.makedirs(parent_dir, exist_ok=True)
+                except Exception as e:
+                    self._show_modern_error(f"Cannot create directory: {e}")
+                    return
+
             ext = os.path.splitext(path)[1].lower()
             lossy_formats = ['.mp4', '.mkv', '.mov', '.webm', '.wmv', '.flv']
 
@@ -1694,6 +1728,13 @@ class ModernStegoGUI(DialogsMixin):
     def _browse_extract_output(self):
         path = filedialog.askdirectory(title="Select Output Directory")
         if path:
+            if not os.path.exists(path):
+                try:
+                    os.makedirs(path, exist_ok=True)
+                except Exception as e:
+                    self._show_modern_error(f"Cannot create directory: {e}")
+                    return
+            
             self.extract_output_dir.set(path)
             self.extract_output_entry.delete(0, "end")
             self.extract_output_entry.insert(0, path)
@@ -2016,6 +2057,14 @@ class ModernStegoGUI(DialogsMixin):
             self._show_modern_warning("Please specify output path.")
             return
 
+        parent_dir = os.path.dirname(output_path)
+        if parent_dir and not os.path.exists(parent_dir):
+            try:
+                os.makedirs(parent_dir, exist_ok=True)
+            except Exception as e:
+                self._show_modern_error(f"Cannot create output directory: {e}")
+                return
+
         use_text = self.use_text_message.get()
         if use_text:
             message = self.message_text.get("0.0", "end").strip()
@@ -2028,17 +2077,16 @@ class ModernStegoGUI(DialogsMixin):
                 self._show_modern_warning("Please select a payload file.")
                 return
 
-        use_enc = self.use_encryption.get()
-        enc_key = self.encryption_key.get() if use_enc else None
+        enc_key = self.encryption_key.get()
+        if not enc_key:
+            self._show_modern_warning("Encryption key is required.")
+            return
+
         use_random = self.use_random.get()
         stego_key = self.stego_key.get() if use_random else None
 
-        if use_enc and not enc_key:
-            self._show_modern_warning("Please enter encryption key.")
-            return
-
         if use_random and not stego_key:
-            self._show_modern_warning("Please enter stego key.")
+            self._show_modern_warning("Please enter stego key for random spreading.")
             return
 
         self.is_processing = True
@@ -2088,7 +2136,7 @@ class ModernStegoGUI(DialogsMixin):
                 stego = VideoSteganography(self.lsb_mode.get())
                 result = stego.embed(
                     video_path, output_path, payload_data, extension,
-                    use_enc, enc_key, use_random, stego_key,
+                    True, enc_key, use_random, stego_key,
                     progress_callback=self._update_progress
                 )
 
@@ -2165,7 +2213,11 @@ class ModernStegoGUI(DialogsMixin):
             self.extract_output_entry.delete(0, "end")
             self.extract_output_entry.insert(0, output_dir)
 
-        enc_key = self.extract_enc_entry.get() or None
+        enc_key = self.extract_enc_entry.get()
+        if not enc_key:
+            self._show_modern_warning("Encryption key is required.")
+            return
+
         stego_key = self.extract_stego_entry.get() or None
 
         self.is_processing = True
@@ -2229,12 +2281,15 @@ Was Random: {result['was_random']}
 LSB Mode: {result['lsb_mode']}
 """
 
+        if result.get('stego_key_ignored', False):
+            info += "\n[INFO] Video was embedded sequentially.\nStego Key was ignored during extraction.\n"
+
         if result['extension'] == '.txt' or not result['extension']:
             try:
                 text = result['data'].decode('utf-8')
                 info += f"\n--- Message Content ---\n{text}"
-            except:
-                info += "\n(Binary content - saved to file)"
+            except UnicodeDecodeError:
+                info += "\nCannot decode message.\nPossible causes:\n- Incorrect encryption key\n- Incorrect stego key (for random mode)\n- Corrupted data"
 
         self.result_text.insert("0.0", info)
 
@@ -2263,9 +2318,8 @@ LSB Mode: {result['lsb_mode']}
             self._show_modern_warning("Please select stego video.")
             return
 
-        self.analysis_result.delete("0.0", "end")
-        self.analysis_result.insert("0.0", "Calculating metrics...")
         self.mse_btn.configure(state="disabled")
+        self.status_label.configure(text="Calculating MSE & PSNR...")
         self.root.update_idletasks()
 
         def calc_thread():
@@ -2286,22 +2340,7 @@ Interpretation:
 - PSNR 30-40 dB = good quality
 - PSNR 20-30 dB = acceptable quality
 - PSNR < 20 dB = poor quality (visible artifacts)
-"""
-
-                with VideoProcessor(orig_path) as vp_orig, VideoProcessor(stego_path) as vp_stego:
-                    orig_frame = vp_orig.read_frame(0)
-                    stego_frame = vp_stego.read_frame(0)
-
-                    if orig_frame is not None and stego_frame is not None:
-                        hist_corr = compare_histograms(orig_frame, stego_frame)
-                        result += f"""Histogram Correlation (Frame 0):
-                                    - Red Channel: {hist_corr['red']:.6f}
-                                    - Green Channel: {hist_corr['green']:.6f}
-                                    - Blue Channel: {hist_corr['blue']:.6f}
-                                    - Average: {hist_corr['average']:.6f}
-
-                                    (Correlation 1.0 = identical histograms)
-                                    """
+                            """
 
                 self.root.after(0, lambda: self._show_analysis_result(result, mse, psnr))
             except Exception as e:
@@ -2310,15 +2349,9 @@ Interpretation:
         threading.Thread(target=calc_thread, daemon=True).start()
 
     def _show_analysis_result(self, text, mse, psnr):
-        self.analysis_result.delete("0.0", "end")
-        self.analysis_result.insert("0.0", text)
         self.status_label.configure(text="Analysis complete!")
         self.mse_btn.configure(state="normal")
 
-        # Show the summary frame
-        self.analysis_summary_frame.pack(fill="x", pady=(0, 15))
-
-        # Update MSE card
         self.mse_value_label.configure(text=f"{mse:.6f}")
         if mse < 0.01:
             self.mse_desc_label.configure(text="Very low distortion")
@@ -2327,7 +2360,6 @@ Interpretation:
         else:
             self.mse_desc_label.configure(text="Noticeable distortion")
 
-        # Update PSNR card
         color = COLORS["success"] if psnr > 40 else COLORS["warning"] if psnr > 30 else COLORS["error"]
         self.psnr_value_label.configure(text=f"{psnr:.2f} dB", text_color=color)
         if psnr > 40:
@@ -2337,11 +2369,8 @@ Interpretation:
         else:
             self.psnr_desc_label.configure(text="Low quality (< 30dB)")
 
-    def _show_histogram(self):
-        self._show_analysis_plot("comparison")
-
-    def _show_histogram_overlay(self):
-        self._show_analysis_plot("overlay")
+    def _show_histogram_residual(self):
+        self._show_analysis_plot("residual")
 
     def _show_multiframe_analysis(self):
         self._show_analysis_plot("multiframe")
@@ -2390,6 +2419,11 @@ Interpretation:
             return
 
         try:
+            frame_idx = self.analysis_frame_index.get()
+        except:
+            frame_idx = 3
+
+        try:
             import matplotlib.pyplot as plt
 
             if plot_type == "multiframe":
@@ -2419,23 +2453,18 @@ Interpretation:
                 return
 
             with VideoProcessor(orig_path) as vp_orig, VideoProcessor(stego_path) as vp_stego:
-                orig_frame = vp_orig.read_frame(0)
-                stego_frame = vp_stego.read_frame(0)
+                orig_frame = vp_orig.read_frame(frame_idx)
+                stego_frame = vp_stego.read_frame(frame_idx)
 
                 if orig_frame is None or stego_frame is None:
-                    self._show_modern_error("Cannot read video frames")
+                    self._show_modern_error(f"Cannot read frame {frame_idx}. Check if frame index is valid.")
                     return
 
-                if plot_type == "comparison":
-                    fig = plot_histogram_comparison(orig_frame, stego_frame)
-                    fig.set_size_inches(10, 5)
-                    fig.tight_layout(rect=[0, 0, 1, 0.95])
-                    self._embed_figure_in_viz(fig, "Histogram Comparison: Original vs Stego")
-                else:
-                    fig = plot_histogram_overlay(orig_frame, stego_frame)
-                    fig.set_size_inches(10, 7)
-                    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-                    self._embed_figure_in_viz(fig, "Overlay Histogram (Original vs Stego)")
+                if plot_type == "residual":
+                    fig = plot_histogram_residual(orig_frame, stego_frame)
+                    fig.set_size_inches(10, 4.5)
+                    fig.tight_layout(rect=[0, 0.05, 1, 0.95])
+                    self._embed_figure_in_viz(fig, f"Residual Histogram (Frame {frame_idx})")
 
         except ImportError:
             self._show_modern_error("matplotlib is required.\nInstall with: pip install matplotlib")
@@ -2497,6 +2526,56 @@ Interpretation:
 
         except Exception as e:
             self._show_modern_error(f"Hash verification failed: {str(e)}")
+
+    def _show_psnr_info(self):
+        info_text = """PSNR (Peak Signal-to-Noise Ratio) Interpretation:
+
+> 40 dB = Excellent quality (imperceptible changes)
+30-40 dB = Good quality (minor changes)
+20-30 dB = Acceptable quality (noticeable changes)
+< 20 dB = Poor quality (visible artifacts)
+
+For LSB steganography, PSNR is typically very high (> 40 dB) because changes are minimal and occur only in the least significant bits."""
+
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("PSNR Information")
+        dialog.geometry("500x320")
+        dialog.resizable(False, False)
+        dialog.configure(fg_color=COLORS["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        header = ctk.CTkFrame(dialog, fg_color=COLORS["primary"], corner_radius=0, height=60)
+        header.pack(fill="x")
+        header.pack_propagate(False)
+        ctk.CTkLabel(header, text="[i]", font=("JetBrains Mono", 24, "bold"),
+                     text_color="white").pack(side="left", padx=20, pady=12)
+        ctk.CTkLabel(header, text="PSNR Information", font=FONTS["subtitle"],
+                     text_color="white").pack(side="left", pady=12)
+
+        content = ctk.CTkFrame(dialog, fg_color="transparent", corner_radius=0)
+        content.pack(fill="both", expand=True, padx=25, pady=20)
+
+        text_frame = ctk.CTkFrame(content, fg_color=COLORS["input_bg"], corner_radius=10)
+        text_frame.pack(fill="both", expand=True, pady=(0, 15))
+
+        info_label = ctk.CTkLabel(
+            text_frame,
+            text=info_text,
+            font=FONTS["body"],
+            text_color=COLORS["text_primary"],
+            wraplength=430,
+            justify="left"
+        )
+        info_label.pack(padx=20, pady=20)
+
+        ctk.CTkButton(
+            dialog, text="OK", font=FONTS["button"],
+            fg_color=COLORS["primary"], text_color="white",
+            hover_color="#0051D5", height=40, width=100,
+            corner_radius=8, command=dialog.destroy
+        ).pack(pady=(0, 20))
+        dialog.focus_set()
 
     def _check_dependencies(self):
         if not check_ffmpeg():

@@ -268,6 +268,16 @@ class VideoSteganography:
             if progress_callback:
                 progress_callback(1, total_frames, "Header parsed")
             
+            stego_key_ignored = False
+            if not use_random and stego_key:
+                stego_key_ignored = True
+                stego_key = None
+            elif use_random and not stego_key:
+                raise StegoError(
+                    "Video ini disisipkan dengan mode Random Spreading. "
+                    "Stego Key diperlukan untuk ekstraksi."
+                )
+            
             payload_pixel_gen = FramePixelGenerator(w, h, stego_key if use_random else None, use_random)
             
             bits_per_frame = pixels_per_frame * self.bits_per_pixel
@@ -319,7 +329,8 @@ class VideoSteganography:
                 'size_bytes': len(payload_data),
                 'was_encrypted': use_encryption,
                 'was_random': use_random,
-                'lsb_mode': lsb_mode
+                'lsb_mode': lsb_mode,
+                'stego_key_ignored': stego_key_ignored
             }
     
     def extract_to_file(self, video_path, output_dir, encryption_key=None, stego_key=None, output_filename=None, progress_callback=None):
@@ -327,6 +338,8 @@ class VideoSteganography:
         
         if not result['success']:
             return result
+        
+        stego_key_ignored = result.get('stego_key_ignored', False)
         
         if output_dir and os.path.splitext(output_dir)[1]:
             output_path = output_dir
@@ -355,6 +368,7 @@ class VideoSteganography:
             f.write(result['data'])
         
         result['output_path'] = output_path
+        result['stego_key_ignored'] = stego_key_ignored
         return result
 
 
