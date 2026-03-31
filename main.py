@@ -3,9 +3,7 @@
 import sys
 import os
 import argparse
-from src.ui.app import main as gui_main
-from src.crypto.stego import VideoSteganography, StegoError
-from src.utils.metric import metrics_streaming
+from src import gui_main, VideoSteganography, StegoError, metrics_streaming
 
 
 def run_gui():
