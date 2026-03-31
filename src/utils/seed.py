@@ -1,5 +1,6 @@
 import random
 import hashlib
+from .function import get_bits_per_pixel
 
 
 def coordinates(idx, w, h):
@@ -97,9 +98,7 @@ class FramePixelGenerator:
 
 
 class EmbedPositionCalculator:
-    def __init__(self, w, h, total_frames, lsb_mode='332', stego_key=None, use_random=True):
-        from function import get_bits_per_pixel
-        
+    def __init__(self, w, h, total_frames, lsb_mode='332', stego_key=None, use_random=True):        
         self.w = w
         self.h = h
         self.total_frames = total_frames

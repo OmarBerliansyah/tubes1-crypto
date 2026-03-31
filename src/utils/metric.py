@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from video import VideoProcessor
+from .video import VideoProcessor
 
 
 def calculate_mse(original_frame, modified_frame):
@@ -34,8 +34,6 @@ def metrics(original, modified):
 
 
 def metrics_streaming(original_path, modified_path, progress_callback=None):
-    from video import VideoProcessor
-    
     mse_values = []
     
     with VideoProcessor(original_path) as orig_vp, VideoProcessor(modified_path) as mod_vp:

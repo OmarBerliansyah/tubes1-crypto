@@ -3,7 +3,7 @@ import os
 import subprocess
 import tempfile
 import shutil
-from function import get_bits_per_pixel
+from .function import get_bits_per_pixel
 
 
 class VideoProcessor:

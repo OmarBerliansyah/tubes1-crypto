@@ -1,4 +1,4 @@
-from function import bytes_to_bits, bits_to_bytes
+from ..utils.function import bytes_to_bits, bits_to_bytes
 import hashlib
 
 class A51:
