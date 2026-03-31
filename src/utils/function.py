@@ -11,30 +11,6 @@ def get_lsb_config(mode='332'):
         raise ValueError(f"Invalid LSB mode: {mode}. Valid modes: {list(LSB_MODES.keys())}")
     return LSB_MODES[mode]
 
-def split(value, mode='332'):
-    if isinstance(value, str):
-        value = ord(value)
-    
-    config = get_lsb_config(mode)
-    r_bits = config['r']
-    g_bits = config['g']
-    b_bits = config['b']
-    
-    if mode == '332':
-        rbit = (value >> 5) & 0x07
-        gbit = (value >> 2) & 0x07
-        bbit = value & 0x03
-    elif mode == '222':
-        rbit = (value >> 4) & 0x03
-        gbit = (value >> 2) & 0x03
-        bbit = value & 0x03
-    elif mode == '111':
-        rbit = (value >> 2) & 0x01
-        gbit = (value >> 1) & 0x01
-        bbit = value & 0x01
-    
-    return rbit, gbit, bbit
-
 def merge(rbit, gbit, bbit, mode='332'):
     if mode == '332':
         return (rbit << 5) | (gbit << 2) | bbit
@@ -87,16 +63,6 @@ def bits_to_bytes(bits):
             byte_val = (byte_val << 1) | bit
         result.append(byte_val)
     return bytes(result)
-
-def char_to_bits(text):
-    return bytes_to_bits(text.encode('utf-8'))
-
-def bits_to_string(bits):
-    data = bits_to_bytes(bits)
-    try:
-        return data.decode('utf-8')
-    except UnicodeDecodeError:
-        return data.decode('latin-1')
 
 def file_to_bits(filepath):
     with open(filepath, 'rb') as f:

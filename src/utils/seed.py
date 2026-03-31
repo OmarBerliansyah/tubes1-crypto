@@ -95,38 +95,3 @@ class FramePixelGenerator:
     
     def clear_cache(self):
         self._frame_indices_cache.clear()
-
-
-class EmbedPositionCalculator:
-    def __init__(self, w, h, total_frames, lsb_mode='332', stego_key=None, use_random=True):        
-        self.w = w
-        self.h = h
-        self.total_frames = total_frames
-        self.pixels_per_frame = w * h
-        self.bits_per_pixel = get_bits_per_pixel(lsb_mode)
-        self.bits_per_frame = self.pixels_per_frame * self.bits_per_pixel
-        self.total_capacity = self.bits_per_frame * total_frames
-        
-        self.pixel_gen = FramePixelGenerator(w, h, stego_key, use_random)
-    
-    def get_capacity(self):
-        return self.total_capacity
-    
-    def get_capacity_bytes(self):
-        return self.total_capacity // 8
-    
-    def bits_needed_for_frame(self, frame_idx, total_bits, header_frames=1):
-        if frame_idx < header_frames:
-            return 0
-        
-        payload_frame_idx = frame_idx - header_frames
-        bits_before = payload_frame_idx * self.bits_per_frame
-        
-        if bits_before >= total_bits:
-            return 0
-        
-        remaining = total_bits - bits_before
-        return min(remaining, self.bits_per_frame)
-    
-    def get_pixel_coords_for_frame(self, frame_idx, num_pixels=None):
-        return self.pixel_gen.get_indices_for_frame(frame_idx, num_pixels)
