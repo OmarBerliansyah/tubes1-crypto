@@ -96,7 +96,7 @@ class VideoSteganography:
                 'payload_start_frame': self.PAYLOAD_START_FRAME
             }
     
-    def embed(self, video_path, output_path, payload_data, extension='', use_encryption=False, encryption_key=None, use_random=False, stego_key=None, progress_callback=None):
+    def embed(self, video_path, output_path, payload_data, extension='', use_encryption=False, encryption_key=None, use_random=False, stego_key=None, original_filename='', progress_callback=None):
         if isinstance(payload_data, str):
             payload_data = payload_data.encode('utf-8')
         
@@ -120,7 +120,7 @@ class VideoSteganography:
             payload_bits = a51.transform(payload_bits)
         
         header_bits = create_header(
-            len(payload_bits), extension, use_encryption, use_random, self.lsb_mode
+            len(payload_bits), extension, use_encryption, use_random, self.lsb_mode, original_filename
         )
         
         temp_dir = tempfile.mkdtemp()
@@ -216,7 +216,7 @@ class VideoSteganography:
             
             header_pixel_gen = FramePixelGenerator(w, h, stego_key=None, use_random=False)
             
-            max_header_bits = 600
+            max_header_bits = 5000
             bits_per_pixel_header = 3
             pixels_needed = (max_header_bits + bits_per_pixel_header - 1) // bits_per_pixel_header
             
@@ -229,7 +229,7 @@ class VideoSteganography:
             header_bits = self._extract_bits_from_frame(header_frame, max_header_bits, header_coords)
             
             try:
-                payload_length, extension, use_encryption, use_random, lsb_mode, header_size = parse_header(header_bits)
+                payload_length, extension, use_encryption, use_random, lsb_mode, original_filename, header_size = parse_header(header_bits)
             except Exception as e:
                 self.lsb_mode = old_mode
                 self.bits_per_pixel = old_bpp
@@ -311,6 +311,7 @@ class VideoSteganography:
                 'success': True,
                 'data': payload_data,
                 'extension': extension,
+                'original_filename': original_filename,
                 'size_bytes': len(payload_data),
                 'was_encrypted': use_encryption,
                 'was_random': use_random,
@@ -318,7 +319,7 @@ class VideoSteganography:
                 'stego_key_ignored': stego_key_ignored
             }
     
-    def extract_to_file(self, video_path, output_dir, encryption_key=None, stego_key=None, output_filename=None, progress_callback=None):
+    def extract_to_file(self, video_path, output_path, encryption_key=None, stego_key=None, progress_callback=None):
         result = self.extract(video_path, encryption_key, stego_key, progress_callback)
         
         if not result['success']:
@@ -326,28 +327,9 @@ class VideoSteganography:
         
         stego_key_ignored = result.get('stego_key_ignored', False)
         
-        if output_dir and os.path.splitext(output_dir)[1]:
-            output_path = output_dir
-            output_base_dir = os.path.dirname(output_path) or '.'
-            if not os.path.exists(output_base_dir):
-                os.makedirs(output_base_dir, exist_ok=True)
-        else:
-            if output_filename:
-                filename = output_filename
-            else:
-                extension = result['extension'] if result['extension'] else '.bin'
-                filename = f"extracted{extension}"
-            
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir, exist_ok=True)
-            
-            output_path = os.path.join(output_dir, filename)
-            
-            counter = 1
-            base, ext = os.path.splitext(output_path)
-            while os.path.exists(output_path):
-                output_path = f"{base}_{counter}{ext}"
-                counter += 1
+        output_dir = os.path.dirname(output_path)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
         
         with open(output_path, 'wb') as f:
             f.write(result['data'])
@@ -357,11 +339,11 @@ class VideoSteganography:
         return result
 
 
-def quick_embed(video_path, output_path, message, lsb_mode='332', use_encryption=False, encryption_key=None, use_random=False, stego_key=None):
+def quick_embed(video_path, output_path, message, lsb_mode='332', use_encryption=False, encryption_key=None, use_random=False, stego_key=None, original_filename='message.txt'):
     stego = VideoSteganography(lsb_mode)
     return stego.embed(
         video_path, output_path, message.encode('utf-8'),
-        '.txt', use_encryption, encryption_key, use_random, stego_key
+        '.txt', use_encryption, encryption_key, use_random, stego_key, original_filename
     )
 
 

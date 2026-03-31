@@ -31,7 +31,6 @@ class ModernStegoGUI(DialogsMixin):
         self.payload_path = tk.StringVar()
         self.output_path = tk.StringVar()
         self.stego_video_path = tk.StringVar()
-        self.extract_output_dir = tk.StringVar()
 
         self.lsb_mode = tk.StringVar(value='332')
         self.use_encryption = tk.BooleanVar(value=True)
@@ -804,37 +803,17 @@ class ModernStegoGUI(DialogsMixin):
         )
         self.extract_stego_entry.pack(side="left", fill="x", expand=True)
 
-        output_section = self._create_section_card(scroll_frame, "Output Directory")
+        output_section = self._create_section_card(scroll_frame, "Output")
         output_section.pack(fill="x", pady=(0, 15))
 
-        output_row = ctk.CTkFrame(output_section, fg_color="transparent", corner_radius=0)
-        output_row.pack(fill="x", padx=15, pady=15)
-
-        self.extract_output_entry = ctk.CTkEntry(
-            output_row,
+        output_info = ctk.CTkLabel(
+            output_section,
+            text="After extraction, you will be prompted to save the file.\nThe original filename will be suggested as default.",
             font=FONTS["body"],
-            fg_color=COLORS["input_bg"],
-            text_color=COLORS["text_primary"],
-            border_color=COLORS["border"],
-            border_width=1,
-            corner_radius=8,
-            height=40,
-            placeholder_text="Select output directory..."
+            text_color=COLORS["text_secondary"],
+            justify="left"
         )
-        self.extract_output_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
-
-        browse_extract_btn = ctk.CTkButton(
-            output_row,
-            text="Browse",
-            font=FONTS["body"],
-            fg_color=COLORS["secondary"],
-            text_color="white",
-            hover_color="#1A365D",
-            height=40,
-            width=100,
-            command=self._browse_extract_output
-        )
-        browse_extract_btn.pack(side="left")
+        output_info.pack(anchor="w", padx=15, pady=15)
 
         action_frame = ctk.CTkFrame(scroll_frame, fg_color="transparent", corner_radius=0)
         action_frame.pack(fill="x", pady=(20, 10))
@@ -1606,8 +1585,6 @@ class ModernStegoGUI(DialogsMixin):
 
     def _reset_extract(self):
         self.stego_video_path.set("")
-        self.extract_output_dir.set("")
-        self.extract_output_entry.delete(0, "end")
         self.extract_enc_entry.delete(0, "end")
         self.extract_stego_entry.delete(0, "end")
         self.result_text.delete("0.0", "end")
@@ -1701,10 +1678,6 @@ class ModernStegoGUI(DialogsMixin):
         )
         if path:
             self.stego_video_path.set(path)
-            output_dir = os.path.dirname(path)
-            self.extract_output_dir.set(output_dir)
-            self.extract_output_entry.delete(0, "end")
-            self.extract_output_entry.insert(0, output_dir)
 
             try:
                 with VideoProcessor(path) as vp:
@@ -1721,19 +1694,6 @@ class ModernStegoGUI(DialogsMixin):
             self.extract_initial.pack_forget()
             self.extract_config.pack(fill="both", expand=True)
 
-    def _browse_extract_output(self):
-        path = filedialog.askdirectory(title="Select Output Directory")
-        if path:
-            if not os.path.exists(path):
-                try:
-                    os.makedirs(path, exist_ok=True)
-                except Exception as e:
-                    self._show_modern_error(f"Cannot create directory: {e}")
-                    return
-            
-            self.extract_output_dir.set(path)
-            self.extract_output_entry.delete(0, "end")
-            self.extract_output_entry.insert(0, path)
 
     def _browse_analysis_file(self, file_type):
         path = filedialog.askopenfilename(
@@ -1902,10 +1862,6 @@ class ModernStegoGUI(DialogsMixin):
         video_exts = ('.avi', '.mp4', '.mkv', '.mov', '.webm', '.flv', '.wmv')
         if file_path.lower().endswith(video_exts):
             self.stego_video_path.set(file_path)
-            output_dir = os.path.dirname(file_path)
-            self.extract_output_dir.set(output_dir)
-            self.extract_output_entry.delete(0, "end")
-            self.extract_output_entry.insert(0, output_dir)
 
             try:
                 with VideoProcessor(file_path) as vp:
@@ -2107,6 +2063,7 @@ class ModernStegoGUI(DialogsMixin):
                 if use_text:
                     payload_data = message.encode('utf-8')
                     extension = '.txt'
+                    original_filename = 'message.txt'
                 else:
                     self.root.after(0, lambda: self.loading_detail.configure(text="Analyzing video capacity..."))
                     stego_check = VideoSteganography(self.lsb_mode.get())
@@ -2122,6 +2079,7 @@ class ModernStegoGUI(DialogsMixin):
                     with open(payload_path, 'rb') as f:
                         payload_data = f.read()
                     extension = os.path.splitext(payload_path)[1]
+                    original_filename = os.path.basename(payload_path)
 
                 self.root.after(0, self._stop_preprocess_animation)
                 self.root.after(0, lambda: self.loading_status.configure(text="Embedding message..."))
@@ -2132,7 +2090,7 @@ class ModernStegoGUI(DialogsMixin):
                 stego = VideoSteganography(self.lsb_mode.get())
                 result = stego.embed(
                     video_path, output_path, payload_data, extension,
-                    True, enc_key, use_random, stego_key,
+                    True, enc_key, use_random, stego_key, original_filename,
                     progress_callback=self._update_progress
                 )
 
@@ -2197,17 +2155,10 @@ class ModernStegoGUI(DialogsMixin):
             return
 
         stego_path = self.stego_video_path.get()
-        output_dir = self.extract_output_dir.get()
 
         if not stego_path or not os.path.exists(stego_path):
             self._show_modern_warning("Please select a stego video.")
             return
-
-        if not output_dir:
-            output_dir = os.path.dirname(stego_path)
-            self.extract_output_dir.set(output_dir)
-            self.extract_output_entry.delete(0, "end")
-            self.extract_output_entry.insert(0, output_dir)
 
         enc_key = self.extract_enc_entry.get()
         if not enc_key:
@@ -2242,17 +2193,69 @@ class ModernStegoGUI(DialogsMixin):
                 self.root.after(0, lambda: self.extract_progress_percent.configure(text="0%"))
 
                 stego = VideoSteganography()
-                result = stego.extract_to_file(
-                    stego_path, output_dir, enc_key, stego_key,
+                result = stego.extract(
+                    stego_path, enc_key, stego_key,
                     progress_callback=self._update_progress
                 )
 
-                self.root.after(0, lambda: self._extract_complete(result))
+                self.root.after(0, lambda: self._prompt_save_extracted(result))
             except Exception as e:
                 error_msg = str(e)
                 self.root.after(0, lambda msg=error_msg: self._extract_error(msg))
 
         threading.Thread(target=extract_thread, daemon=True).start()
+
+    def _prompt_save_extracted(self, result):
+        if not result['success']:
+            self._extract_error("Extraction failed")
+            return
+        
+        original_filename = result.get('original_filename', '')
+        extension = result.get('extension', '')
+        
+        if original_filename:
+            default_name = original_filename
+        else:
+            default_name = f"extracted{extension}" if extension else "extracted.bin"
+        
+        default_dir = os.path.dirname(self.stego_video_path.get())
+        
+        all_files = [("All files", "*.*")]
+        if extension:
+            ext_clean = extension.lstrip('.')
+            file_types = [(f"{ext_clean.upper()} files", f"*{extension}"), ("All files", "*.*")]
+        else:
+            file_types = all_files
+        
+        output_path = filedialog.asksaveasfilename(
+            title="Save Extracted File As",
+            initialdir=default_dir,
+            initialfile=default_name,
+            defaultextension=extension if extension else ".bin",
+            filetypes=file_types
+        )
+        
+        if not output_path:
+            self._stop_preprocess_animation()
+            self.is_processing = False
+            self.extract_btn.configure(state="normal")
+            self.extract_loading.pack_forget()
+            self.extract_config.pack(fill="both", expand=True)
+            self._show_modern_warning("Save cancelled. Extraction was successful but file was not saved.")
+            return
+        
+        try:
+            output_dir = os.path.dirname(output_path)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            
+            with open(output_path, 'wb') as f:
+                f.write(result['data'])
+            
+            result['output_path'] = output_path
+            self._extract_complete(result)
+        except Exception as e:
+            self._extract_error(f"Failed to save file: {str(e)}")
 
     def _extract_complete(self, result):
         self._stop_preprocess_animation()
@@ -2270,6 +2273,7 @@ class ModernStegoGUI(DialogsMixin):
         info = f"""Extraction Successful!
 ========================
 Output File: {result.get('output_path', 'N/A')}
+Original Filename: {result.get('original_filename', 'N/A')}
 Extension: {result['extension']}
 Size: {result['size_bytes']:,} bytes
 Was Encrypted: {result['was_encrypted']}

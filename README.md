@@ -86,6 +86,7 @@ tubes1-crypto/
 ### Header Format
 ```
 [PayloadLength: 32 bits] | [ExtLen: 8 bits] | [Extension: variable] |
+[FilenameLen: 8 bits] | [OriginalFilename: variable] |
 [Encrypted: 8 bits] | [Random: 8 bits] | [LSBMode: 8 bits]
 ```
 

@@ -76,6 +76,7 @@ def cli_embed():
         message = '\n'.join(lines)
         payload_data = message.encode('utf-8')
         extension = '.txt'
+        original_filename = 'message.txt'
     else:
         file_path = input("File path: ").strip().strip('"')
         if not os.path.exists(file_path):
@@ -84,6 +85,7 @@ def cli_embed():
         with open(file_path, 'rb') as f:
             payload_data = f.read()
         extension = os.path.splitext(file_path)[1]
+        original_filename = os.path.basename(file_path)
         print(f"File size: {len(payload_data):,} bytes")
 
     if len(payload_data) * 8 > cap['payload_capacity_bits']:
@@ -111,7 +113,7 @@ def cli_embed():
     try:
         result = stego.embed(
             video_path, output_path, payload_data, extension,
-            use_enc, enc_key, use_random, stego_key, progress
+            use_enc, enc_key, use_random, stego_key, original_filename, progress
         )
         print(f"\n\nSuccess!")
         print(f"Output: {result['output_path']}")
@@ -135,8 +137,6 @@ def cli_extract():
     enc_key = input("Encryption key (leave empty if not encrypted): ").strip() or None
     stego_key = input("Stego key (leave empty if sequential): ").strip() or None
 
-    output_dir = input("Output directory [default: current]: ").strip() or '.'
-
     print("\nExtracting...")
 
     def progress(current, total, status):
@@ -145,15 +145,33 @@ def cli_extract():
 
     try:
         stego = VideoSteganography()
-        result = stego.extract_to_file(video_path, output_dir, enc_key, stego_key, progress_callback=progress)
+        result = stego.extract(video_path, enc_key, stego_key, progress_callback=progress)
 
-        print(f"\n\nSuccess!")
-        print(f"Output: {result['output_path']}")
-        print(f"Size: {result['size_bytes']:,} bytes")
+        print(f"\n\nExtraction successful!")
+        print(f"Original filename: {result.get('original_filename', 'N/A')}")
         print(f"Extension: {result['extension']}")
+        print(f"Size: {result['size_bytes']:,} bytes")
         print(f"Was encrypted: {result['was_encrypted']}")
         print(f"Was random: {result['was_random']}")
         print(f"LSB mode: {result['lsb_mode']}")
+
+        original_filename = result.get('original_filename', '')
+        if original_filename:
+            default_name = original_filename
+        else:
+            extension = result.get('extension', '')
+            default_name = f"extracted{extension}" if extension else "extracted.bin"
+        
+        output_path = input(f"\nSave as [default: {default_name}]: ").strip() or default_name
+        
+        output_dir = os.path.dirname(output_path)
+        if output_dir and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+        
+        with open(output_path, 'wb') as f:
+            f.write(result['data'])
+        
+        print(f"File saved to: {output_path}")
 
         if result['extension'] == '.txt' or not result['extension']:
             try:

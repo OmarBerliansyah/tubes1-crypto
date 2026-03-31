@@ -86,7 +86,7 @@ def bits_to_int(bits):
         value = (value << 1) | bit
     return value
 
-def create_header(payload_length, extension, use_encryption, use_random, lsb_mode):
+def create_header(payload_length, extension, use_encryption, use_random, lsb_mode, original_filename=''):
     header_bits = []
     
     header_bits.extend(int_to_bits(payload_length, 32))
@@ -95,6 +95,11 @@ def create_header(payload_length, extension, use_encryption, use_random, lsb_mod
     header_bits.extend(int_to_bits(len(ext_bytes), 8))
     
     header_bits.extend(bytes_to_bits(ext_bytes))
+    
+    filename_bytes = original_filename.encode('utf-8') if original_filename else b''
+    header_bits.extend(int_to_bits(len(filename_bytes), 8))
+    
+    header_bits.extend(bytes_to_bits(filename_bytes))
     
     header_bits.extend(int_to_bits(1 if use_encryption else 0, 8))
     
@@ -121,6 +126,16 @@ def parse_header(header_bits):
     else:
         extension = ''
     
+    filename_len = bits_to_int(header_bits[idx:idx+8])
+    idx += 8
+    
+    if filename_len > 0:
+        filename_bits = header_bits[idx:idx + filename_len * 8]
+        original_filename = bits_to_bytes(filename_bits).decode('utf-8')
+        idx += filename_len * 8
+    else:
+        original_filename = ''
+    
     use_encryption = bits_to_int(header_bits[idx:idx+8]) == 1
     idx += 8
     
@@ -132,7 +147,7 @@ def parse_header(header_bits):
     mode_map = {1: '111', 2: '222', 3: '332'}
     lsb_mode = mode_map.get(mode_val, '332')
     
-    return payload_length, extension, use_encryption, use_random, lsb_mode, idx
+    return payload_length, extension, use_encryption, use_random, lsb_mode, original_filename, idx
 
 def get_bits_per_pixel(mode='332'):
     return LSB_MODES[mode]['total']
