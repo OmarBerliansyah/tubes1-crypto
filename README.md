@@ -97,24 +97,6 @@ Setiap 228-bit block:
 4. Run 100 empty clockings
 5. Generate 228-bit keystream
 
-## Testing
-
-### Verifikasi Integritas (SHA-256)
-```bash
-certutil -hashfile file_asli.pdf SHA256
-certutil -hashfile extracted_file.pdf SHA256
-
-sha256sum file_asli.pdf
-sha256sum extracted_file.pdf
-```
-
-Hash harus identik untuk memastikan ekstraksi berhasil.
-
-### Test Matrix
-1. LSB 1-1-1, Random, No Encryption
-2. LSB 2-2-2, Sequential, A5/1 Encryption
-3. LSB 3-3-2, Random, A5/1 Encryption
-
 ## Catatan Penting
 
 1. **Codec Lossless**: Video output menggunakan FFV1 codec (lossless) untuk mempertahankan LSB bits.
@@ -131,65 +113,13 @@ Hash harus identik untuk memastikan ekstraksi berhasil.
    - Payload melebihi kapasitas: Error akan ditampilkan sebelum proses dimulai
    - Kehilangan 1 bit LSB: Seluruh data terdekripsi akan rusak (karena A5/1 adalah stream cipher)
 
-## Dependencies
+## Dependensi
 
 - Python 3.7+
 - opencv-python >= 4.5.0
 - numpy >= 1.19.0
 - matplotlib >= 3.3.0
 - ffmpeg (opsional, untuk audio preservation)
-
-## Critical Fixes Implemented
-
-### 1. Garbage Header Protection
-Program sekarang memvalidasi header dari video steganografi. Jika Anda mencoba extract dari video normal yang tidak mengandung steganografi, program akan menampilkan error yang jelas tanpa crash:
-```
-"Video ini tidak mengandung pesan steganografi yang valid (Header Corrupt)"
-```
-
-### 2. Capacity Validation
-Sebelum proses embed, program akan memverifikasi apakah payload muat dalam video:
-```python
-if payload_size > video_capacity:
-    raise StegoError("Payload too large...")
-```
-
-### 3. Memory Management
-- **Frame-by-frame processing**: Video tidak pernah dimuat seluruhnya ke RAM
-- **Audio streaming**: ffmpeg digunakan untuk demux/mux tanpa load full audio
-- **Bit list limitation**: Untuk testing, batasi file payload < 5 MB
-
-## Helper Tools
-
-### Test Helper Script
-```bash
-# Calculate SHA-256 hash
-python test_helper.py hash dokumen.pdf
-
-# Compare two files by hash
-python test_helper.py compare original.pdf extracted.pdf
-
-# Create dummy file for testing
-python test_helper.py dummy 1024 bigfile.bin
-
-# Show video capacity
-python test_helper.py capacity cover.avi
-```
-
-### Quick Test
-```bash
-python quick_test.py
-```
-Akan menjalankan unit tests untuk memverifikasi semua komponen bekerja dengan baik.
-
-## Testing Guide
-
-Lihat file `TESTING_GUIDE.md` untuk panduan lengkap testing dengan skenario:
-- Kombinasi LSB modes
-- Capacity overflow testing
-- File integrity verification (SHA-256)
-- Histogram analysis
-- Edge cases (garbage header, wrong keys)
 
 ## License
 
