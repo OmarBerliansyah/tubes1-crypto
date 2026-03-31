@@ -80,8 +80,8 @@ tubes1-crypto/
 ## Arsitektur
 
 ### Frame Processing
-- **Frame 0**: Reserved untuk metadata header (sequential, LSB 1-1-1, tanpa enkripsi)
-- **Frame 1+**: Payload data (dengan enkripsi dan random spreading jika diaktifkan)
+- **Frame 2**: Reserved untuk metadata header (sequential, LSB 1-1-1, tanpa enkripsi)
+- **Frame 3+**: Payload data (dengan enkripsi dan random spreading jika diaktifkan)
 
 ### Header Format
 ```
