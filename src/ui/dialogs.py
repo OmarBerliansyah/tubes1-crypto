@@ -9,7 +9,7 @@ class DialogsMixin:
     def _show_modern_warning(self, message):
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("Warning")
-        dialog.geometry("400x200")
+        dialog.geometry("440x220")
         dialog.resizable(False, False)
         dialog.configure(fg_color=COLORS["bg"])
         dialog.transient(self.root)
@@ -21,7 +21,7 @@ class DialogsMixin:
         ctk.CTkLabel(content, text="[!]", font=("JetBrains Mono", 36, "bold"),
                      text_color=COLORS["warning"]).pack()
         ctk.CTkLabel(content, text=message, font=FONTS["body"],
-                     text_color=COLORS["text_primary"], wraplength=340).pack(pady=15)
+                     text_color=COLORS["text_primary"], wraplength=380).pack(pady=15)
 
         ctk.CTkButton(
             dialog, text="OK", font=FONTS["button"],
@@ -33,7 +33,7 @@ class DialogsMixin:
     def _show_modern_error(self, message):
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("Error")
-        dialog.geometry("450x220")
+        dialog.geometry("480x240")
         dialog.resizable(False, False)
         dialog.configure(fg_color=COLORS["bg"])
         dialog.transient(self.root)
@@ -47,7 +47,7 @@ class DialogsMixin:
         ctk.CTkLabel(content, text="An Error Occurred", font=FONTS["subtitle"],
                      text_color=COLORS["error"]).pack(pady=(10, 5))
         ctk.CTkLabel(content, text=message[:200], font=FONTS["body"],
-                     text_color=COLORS["text_primary"], wraplength=390).pack()
+                     text_color=COLORS["text_primary"], wraplength=420).pack()
 
         ctk.CTkButton(
             dialog, text="OK", font=FONTS["button"],
@@ -77,7 +77,7 @@ class DialogsMixin:
         content.pack(fill="both", expand=True, padx=25, pady=25)
         ctk.CTkLabel(content, text="Your message has been successfully embedded into the video.",
                      font=FONTS["body"], text_color=COLORS["text_secondary"],
-                     wraplength=470).pack(anchor="w", pady=(0, 20))
+                     wraplength=450).pack(anchor="w", pady=(0, 20))
 
         details = ctk.CTkFrame(content, fg_color=COLORS["input_bg"], corner_radius=12)
         details.pack(fill="x", pady=(0, 20))
@@ -102,7 +102,7 @@ class DialogsMixin:
         ctk.CTkLabel(path_frame, text="Full Path:", font=FONTS["small"],
                      text_color=COLORS["text_secondary"]).pack(anchor="w")
         ctk.CTkLabel(path_frame, text=result['output_path'], font=FONTS["small"],
-                     text_color=COLORS["text_primary"], wraplength=470).pack(anchor="w")
+                     text_color=COLORS["text_primary"], wraplength=450).pack(anchor="w")
 
         ctk.CTkButton(
             dialog, text="OK", font=FONTS["button"],
@@ -145,7 +145,7 @@ class DialogsMixin:
         ctk.CTkLabel(content, text="The selected file exceeds the video's capacity. "
                      "Please choose a smaller file or use a video with higher capacity.",
                      font=FONTS["small"], text_color=COLORS["text_secondary"],
-                     wraplength=420).pack()
+                     wraplength=400).pack()
 
         ctk.CTkButton(
             dialog, text="OK", font=FONTS["button"],
@@ -187,7 +187,7 @@ class DialogsMixin:
 
         ctk.CTkLabel(content, text=f"Available space: {max_bytes - payload_size:,} bytes remaining",
                      font=FONTS["small"], text_color=COLORS["text_secondary"],
-                     wraplength=390).pack()
+                     wraplength=380).pack()
 
         ctk.CTkButton(
             dialog, text="OK", font=FONTS["button"],
@@ -225,7 +225,7 @@ class DialogsMixin:
         ctk.CTkLabel(content, text="The payload is too large for this video. "
                      "Please use a larger video or reduce the payload size.",
                      font=FONTS["small"], text_color=COLORS["text_secondary"],
-                     wraplength=390).pack()
+                     wraplength=380).pack()
 
         ctk.CTkButton(
             dialog, text="OK", font=FONTS["button"],
@@ -261,7 +261,7 @@ class DialogsMixin:
         ctk.CTkLabel(content, text="This will DESTROY the LSB steganographic data. "
                      "The hidden message will be unrecoverable.",
                      font=FONTS["body"], text_color=COLORS["text_primary"],
-                     wraplength=450).pack(anchor="w", pady=(0, 10))
+                     wraplength=440).pack(anchor="w", pady=(0, 10))
 
         rec = ctk.CTkFrame(content, fg_color=COLORS["input_bg"], corner_radius=8)
         rec.pack(fill="x", pady=(0, 15))

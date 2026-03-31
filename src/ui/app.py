@@ -2539,7 +2539,7 @@ For LSB steganography, PSNR is typically very high (> 40 dB) because changes are
 
         dialog = ctk.CTkToplevel(self.root)
         dialog.title("PSNR Information")
-        dialog.geometry("500x320")
+        dialog.geometry("540x340")
         dialog.resizable(False, False)
         dialog.configure(fg_color=COLORS["bg"])
         dialog.transient(self.root)
@@ -2564,7 +2564,7 @@ For LSB steganography, PSNR is typically very high (> 40 dB) because changes are
             text=info_text,
             font=FONTS["body"],
             text_color=COLORS["text_primary"],
-            wraplength=430,
+            wraplength=470,
             justify="left"
         )
         info_label.pack(padx=20, pady=20)
